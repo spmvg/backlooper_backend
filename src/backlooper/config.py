@@ -1,5 +1,3 @@
-import logging
-
 # TODO: make some of these settings adjustable in the front-end
 BEATS_PER_BAR = 4
 DEFAULT_BPM = 120
@@ -37,4 +35,3 @@ TEMPO_EVENT = 'tempo'
 TRACKS_EVENT = 'tracks'
 
 LOGS_FORMAT = '%(created)s - %(levelname)s - %(name)s - %(message)s'
-LOG_LEVEL = logging.DEBUG

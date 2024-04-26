@@ -7,7 +7,7 @@ The frontend and backend communicate by sending JSON messages back and forth.
 The implementation is based on ``asyncio``.
 More documentation is provided in the underlying modules, such as ``audio`` and ``session``.
 """
-
+import argparse
 import asyncio
 import json
 import logging
@@ -17,19 +17,26 @@ import websockets
 
 from backlooper.audio import AudioStream
 from backlooper.config import EVENT_TYPE_KEY, INITIALIZE_EVENT, ERROR_EVENT, MESSAGE_KEY, SET_BPM_EVENT, \
-    BPM_EVENT, BPM_KEY, STOP_EVENT, CALIBRATE_EVENT, LOGS_FORMAT, LOG_LEVEL, VOLUME_KEY, \
+    BPM_EVENT, BPM_KEY, STOP_EVENT, CALIBRATE_EVENT, LOGS_FORMAT, VOLUME_KEY, \
     CLICKTRACK_VOLUME_EVENT, LATENCY_EVENT, LATENCY_KEY, START_EVENT, BACKLOOP_EVENT, RESET_EVENT, TRACK_KEY, \
     BARS_TO_RECORD_KEY, DEFAULT_BPM, MAJOR_VERSION_EVENT, MAJOR_VERSION
 from backlooper.session import Session
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Backlooper')
+    parser.add_argument('--debug', help='Enable debug logging', action='store_true')
+    args = parser.parse_args()
+    log_level = logging.INFO
+    if args.debug:
+        log_level = logging.DEBUG
+
     logger = logging.getLogger('backlooper')  # logger of backlooper calls itself backlooper
-    logger.setLevel(LOG_LEVEL)
+    logger.setLevel(log_level)
     screen_handler = logging.StreamHandler()
     screen_handler.setFormatter(logging.Formatter(LOGS_FORMAT))
     logger.addHandler(screen_handler)
 
-    audio = AudioStream()
+    audio = AudioStream(log_level=log_level)
 
     session = Session(
         bpm=DEFAULT_BPM,

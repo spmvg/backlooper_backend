@@ -18,7 +18,7 @@ import numpy as np
 from sounddevice import Stream, sleep, query_devices
 
 from backlooper._clicktrack import clicktrack
-from backlooper.config import LOGS_FORMAT, LOG_LEVEL, NUMBER_OF_TRACKS, BEATS_PER_BAR
+from backlooper.config import LOGS_FORMAT, NUMBER_OF_TRACKS, BEATS_PER_BAR
 from backlooper.striped_storage import StripedStorage
 
 _DEFAULT_LOOPER_VALUE = float('inf')
@@ -43,6 +43,8 @@ class AudioStream:
     """Number of samples that are handled at one time by the ``callback`` function."""
     sample_rate: Optional[int] = 44100
     """Sample rate of the audio interface."""
+    log_level: int = logging.DEBUG
+    """Log level"""
 
     def __post_init__(self):
         self._clicktrack_bpm = Value(_SHARED_FLOAT_TYPE, _DEFAULT_BPM_VALUE)
@@ -168,7 +170,7 @@ class AudioStream:
         """
         duration = 1  # seconds. Increasing this value causes delay on exit.
         self._logger = logging.getLogger(__name__)
-        self._logger.setLevel(LOG_LEVEL)
+        self._logger.setLevel(logging.DEBUG)
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)

@@ -13,7 +13,8 @@ def clicktrack(volume_multiplier=1) -> np.array:
     sampling_rate, click = wavfile.read(
         os.path.join(
             os.path.split(__file__)[0],
-            '../../samples/hi_hat.wav',
+            'samples',
+            'hi_hat.wav',
         )
     )
     click = click * 0.0000020 * volume_multiplier
