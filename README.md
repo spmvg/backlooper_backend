@@ -8,10 +8,9 @@ The last few bars will be looped if you select a track at approximately the firs
 For user documentation, please see [here](https://backlooper.app/docs/general).
 
 For developer documentation, please continue reading.
-More developer documentation is provided [here](TODO sphinx).
+More developer documentation is provided [here](https://backlooper.readthedocs.io/en/latest/).
 
-
-The frontend code is provided [here](TODO frontend code).
+The frontend code is provided [here](https://github.com/spmvg/backlooper_frontend).
 
 ## Development setup
 Install the backend locally:
