@@ -11,6 +11,8 @@ sphinx:
 
 build:
   os: ubuntu-22.04
+  apt_packages:
+    - libportaudio2
   tools:
     python: "3.10"
 
