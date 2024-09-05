@@ -1,9 +1,8 @@
 # Backlooper.app
 
-[Backlooper.app](https://backlooper.app) is a looper that allows you to decide to loop a few bars after you played them.
-It is not necessary to hit "record" before playing a loop.
+[Backlooper.app](https://backlooper.app) loops audio without having to trigger beforehand.
 Audio is always being recorded.
-The last few bars will be looped if you select a track at approximately the first beat of the next bar.
+The last few bars will be played back if you select a track at approximately the first beat of the next bar.
 
 For user documentation, please see [here](https://backlooper.app/docs/general).
 
