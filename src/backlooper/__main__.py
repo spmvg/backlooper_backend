@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import logging
+import multiprocessing
 from json import JSONDecodeError
 
 import websockets
@@ -23,6 +24,7 @@ from backlooper.config import EVENT_TYPE_KEY, INITIALIZE_EVENT, ERROR_EVENT, MES
 from backlooper.session import Session
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     parser = argparse.ArgumentParser(description='Backlooper')
     parser.add_argument('--debug', help='Enable debug logging', action='store_true')
     args = parser.parse_args()

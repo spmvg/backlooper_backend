@@ -7,3 +7,4 @@ build
 *.log
 latency_calibration_diagram.png
 .vs
+*.spec
