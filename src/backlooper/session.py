@@ -8,7 +8,6 @@ import json
 import logging
 import math
 import time
-import webbrowser
 from base64 import b64encode
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -87,9 +86,6 @@ class Session:
 
         loop = asyncio.get_event_loop()
         loop.create_task(self.click())
-
-        # session is running, so now we can open the browser
-        webbrowser.open("https://www.backlooper.app/")
 
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin

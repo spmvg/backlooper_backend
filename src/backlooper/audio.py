@@ -8,6 +8,7 @@ The audio interface is controlled by ``sounddevice``.
 
 import logging
 import time
+import webbrowser
 from dataclasses import dataclass
 from multiprocessing import Process, Value
 from multiprocessing.shared_memory import ShareableList
@@ -190,6 +191,10 @@ class AudioStream:
                 f'If an input or output device should be changed, please adjust the current settings of the OS '
                 f'and restart this application. The default input and output device will be taken.'
             )
+
+            # session is running, so now we can open the browser
+            webbrowser.open("https://www.backlooper.app/")
+
             while True:
                 sleep(int(duration * 1000))
 
