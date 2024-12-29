@@ -27,7 +27,7 @@ jobs:
       - name: Install development requirements
         run: python -m pip install -r dev-requirements.txt
       - name: Build
-        run: python -m PyInstaller src\backlooper\__main__.py --add-data "src/backlooper/samples:backlooper/samples" --onefile --name "backlooper-$VERSION" --icon pyinstaller/icon.png
+        run: python -m PyInstaller src/backlooper/__main__.py --add-data "src/backlooper/samples:backlooper/samples" --onefile --name "backlooper-$VERSION" --icon pyinstaller/icon.png
         env:
           VERSION: ${{ github.event.inputs.version }}
       - name: Publish
