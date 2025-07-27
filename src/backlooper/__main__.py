@@ -38,13 +38,16 @@ if __name__ == "__main__":
     screen_handler.setFormatter(logging.Formatter(LOGS_FORMAT))
     logger.addHandler(screen_handler)
 
-    audio = AudioStream(log_level=log_level)
+    audio = AudioStream(
+        log_level=log_level,
+        input_device_id=14,  # TODO: make configurable
+        output_device_id=14,  # TODO: make configurable
+    )
 
     session = Session(
         bpm=DEFAULT_BPM,
         audio=audio,
     )
-    session.audio.latency_seconds = 0
 
     async def handle_initialize(websocket, event):
         session.register_websocket(websocket)
@@ -56,8 +59,7 @@ if __name__ == "__main__":
             EVENT_TYPE_KEY: CLICKTRACK_VOLUME_EVENT,
             VOLUME_KEY: session.audio.clicktrack_volume
         }))
-        if session.audio.latency_seconds != 0:
-            await session.send_latency_update()
+        await session.send_latency_update()
         await session.send_tracks_update()
         await websocket.send(json.dumps({
             EVENT_TYPE_KEY: MAJOR_VERSION_EVENT,

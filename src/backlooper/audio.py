@@ -46,6 +46,10 @@ class AudioStream:
     """Sample rate of the audio interface."""
     log_level: int = logging.DEBUG
     """Log level"""
+    input_device_id: Optional[int] = None
+    """ TODO """
+    output_device_id: Optional[int] = None
+    """ TODO """
 
     def __post_init__(self):
         self._clicktrack_bpm = Value(_SHARED_FLOAT_TYPE, _DEFAULT_BPM_VALUE)
@@ -63,6 +67,8 @@ class AudioStream:
         self._clicktrack = clicktrack()
         self._clicktrack_first_beat = clicktrack(volume_multiplier=3)
         self._logger = None
+        self._input_latency_seconds = None
+        self._output_latency_seconds = None
 
     def callback(self, indata, outdata, frames, callback_time, status):
         """
@@ -171,29 +177,48 @@ class AudioStream:
         """
         duration = 1  # seconds. Increasing this value causes delay on exit.
         self._logger = logging.getLogger(__name__)
-        self._logger.setLevel(logging.DEBUG)
+        self._logger.setLevel(logging.DEBUG)  # TODO: make INFO on release
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)
+
+        self._logger.info('Available sound devices:\n\n%s\n', query_devices())
+
         with Stream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
                 blocksize=self.block_size,
                 callback=self.callback,
+                device=(self.input_device_id, self.output_device_id),  # TODO: make configurable
+                latency=('low', 'low'),
         ) as stream:
             input_device_id, output_device_id = stream.device
+
             device_name_field = 'name'
-            input_device = query_devices(input_device_id)[device_name_field]
-            output_device = query_devices(output_device_id)[device_name_field]
-            self._logger.info(f'Using input device: {input_device}')
-            self._logger.info(f'Using output device: {output_device}')
-            self._logger.info(
-                f'If an input or output device should be changed, please adjust the current settings of the OS '
-                f'and restart this application. The default input and output device will be taken.'
+            default_low_input_latency_field = 'default_low_input_latency'
+            default_low_output_latency_field = 'default_low_output_latency'
+            input_device_dict = query_devices(input_device_id)
+            self._logger.debug(
+                'Input device: %s',
+                input_device_dict,
             )
+            output_device_dict = query_devices(output_device_id)
+            self._logger.debug(
+                'Output device: %s',
+                output_device_dict,
+            )
+            input_device = input_device_dict[device_name_field]
+            output_device = output_device_dict[device_name_field]
+            self._input_latency_seconds = input_device_dict[default_low_input_latency_field]
+            self._output_latency_seconds = output_device_dict[default_low_output_latency_field]
+            self._logger.info(f'Using input device {self.input_device_id}: {input_device}')
+            self._logger.info(f'Input latency: {self._input_latency_seconds:.3f} s')
+            self._logger.info(f'Using output device {self.output_device_id}: {output_device}')
+            self._logger.info(f'Output latency: {self._output_latency_seconds:.3f} s')
+            self.latency_seconds = self._input_latency_seconds + self._output_latency_seconds
 
             # session is running, so now we can open the browser
-            webbrowser.open("https://www.backlooper.app/")
+            # webbrowser.open("https://www.backlooper.app/")  # TODO: remove again before release
 
             while True:
                 sleep(int(duration * 1000))
