@@ -29,6 +29,8 @@ from backlooper.session import Session
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     parser = argparse.ArgumentParser(description='Backlooper')
+    parser.add_argument('--input-device-id', help='ID (integer) of the input device to use. Run once without this argument and check the logs to see which IDs are available.', type=int)
+    parser.add_argument('--output-device-id', help='ID (integer) of the output device to use. Run once without this argument and check the logs to see which IDs are available.', type=int)
     parser.add_argument('--debug', help='Enable debug logging', action='store_true')
     args = parser.parse_args()
     log_level = logging.INFO
@@ -43,8 +45,8 @@ if __name__ == "__main__":
 
     audio = AudioStream(
         log_level=log_level,
-        input_device_id=14,  # TODO: make configurable
-        output_device_id=14,  # TODO: make configurable
+        input_device_id=args.input_device_id,
+        output_device_id=args.output_device_id,
     )
 
     session = Session(

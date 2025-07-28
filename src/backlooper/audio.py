@@ -190,7 +190,7 @@ class AudioStream:
         """
         duration = 1  # seconds. Increasing this value causes delay on exit.
         self._logger = logging.getLogger(__name__)
-        self._logger.setLevel(logging.DEBUG)  # TODO: make INFO on release
+        self._logger.setLevel(logging.INFO)  # TODO: make INFO on release
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)
@@ -224,9 +224,9 @@ class AudioStream:
             output_device = output_device_dict[device_name_field]
             self._input_latency_from_device_seconds = input_device_dict[default_low_input_latency_field]
             self._output_latency_from_device_seconds = output_device_dict[default_low_output_latency_field]
-            self._logger.info(f'Using input device {self.input_device_id}: {input_device}')
+            self._logger.info(f'Using input device {input_device_id}: {input_device}')
             self._logger.debug(f'Input latency as declared by device: {self._input_latency_from_device_seconds:.3f} s')
-            self._logger.info(f'Using output device {self.output_device_id}: {output_device}')
+            self._logger.info(f'Using output device {output_device_id}: {output_device}')
             self._logger.debug(f'Output latency as declared by device: {self._output_latency_from_device_seconds:.3f} s')
             self.latency_seconds = self._input_latency_from_device_seconds + self._output_latency_from_device_seconds
 
