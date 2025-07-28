@@ -63,12 +63,14 @@ class AudioStream:
         self._previous_dac_time = None
         self._loop_start_end_times = ShareableList([_DEFAULT_LOOPER_VALUE, _DEFAULT_LOOPER_VALUE, 0] * NUMBER_OF_TRACKS)
         self._latency_samples = Value(_SHARED_INT_TYPE, 0)
+        self._using_automatic_latency_correction = Value(_SHARED_INT_TYPE, 0)
         self._clicktrack_volume = Value(_SHARED_FLOAT_TYPE, 1)
         self._clicktrack = clicktrack()
         self._clicktrack_first_beat = clicktrack(volume_multiplier=3)
         self._logger = None
-        self._input_latency_seconds = None
-        self._output_latency_seconds = None
+        self._input_latency_from_device_seconds = None
+        self._output_latency_from_device_seconds = None
+        self._driver_warning_printed = False
 
     def callback(self, indata, outdata, frames, callback_time, status):
         """
@@ -83,12 +85,23 @@ class AudioStream:
         if self._samples_origin.value != self._samples_origin.value:
             self._samples_origin.value = time.time()
 
-        actual_latency_seconds = callback_time.outputBufferDacTime-callback_time.inputBufferAdcTime
+        output_time = callback_time.outputBufferDacTime
+        input_time = callback_time.inputBufferAdcTime
+        if (not input_time or not output_time) and not self._driver_warning_printed:
+            self._logger.warning(
+                'Your audio driver does not support inputBufferAdcTime and/or '
+                'outputBufferDacTime. If you want automatic latency '
+                'correction, please use an audio device '
+                'with ASIO drivers. You must calibrate now to set the '
+                'latency correctly.'
+            )
+            self._driver_warning_printed = True
         latency_update_threshold_seconds = 0.002
-        if abs(
-                self.latency_seconds - actual_latency_seconds
+        if input_time and output_time and abs(
+                self.latency_seconds - (output_time-input_time)
         ) > latency_update_threshold_seconds:
-            self.latency_seconds = actual_latency_seconds
+            self.latency_seconds = output_time-input_time
+            self._using_automatic_latency_correction.value = 1
 
         start_of_callback = time.time()
 
@@ -208,12 +221,13 @@ class AudioStream:
             )
             input_device = input_device_dict[device_name_field]
             output_device = output_device_dict[device_name_field]
-            self._input_latency_seconds = input_device_dict[default_low_input_latency_field]
-            self._output_latency_seconds = output_device_dict[default_low_output_latency_field]
+            self._input_latency_from_device_seconds = input_device_dict[default_low_input_latency_field]
+            self._output_latency_from_device_seconds = output_device_dict[default_low_output_latency_field]
             self._logger.info(f'Using input device {self.input_device_id}: {input_device}')
-            self._logger.debug(f'Input latency as declared by device: {self._input_latency_seconds:.3f} s')
+            self._logger.debug(f'Input latency as declared by device: {self._input_latency_from_device_seconds:.3f} s')
             self._logger.info(f'Using output device {self.output_device_id}: {output_device}')
-            self._logger.debug(f'Output latency as declared by device: {self._output_latency_seconds:.3f} s')
+            self._logger.debug(f'Output latency as declared by device: {self._output_latency_from_device_seconds:.3f} s')
+            self.latency_seconds = self._input_latency_from_device_seconds + self._output_latency_from_device_seconds
 
             # session is running, so now we can open the browser
             # webbrowser.open("https://www.backlooper.app/")  # TODO: remove again before release
