@@ -17,10 +17,13 @@ from json import JSONDecodeError
 import websockets
 
 from backlooper.audio import AudioStream
-from backlooper.config import EVENT_TYPE_KEY, INITIALIZE_EVENT, ERROR_EVENT, MESSAGE_KEY, SET_BPM_EVENT, \
+from backlooper.config import EVENT_TYPE_KEY, INITIALIZE_EVENT, ERROR_EVENT, \
+    MESSAGE_KEY, SET_BPM_EVENT, \
     BPM_EVENT, BPM_KEY, STOP_EVENT, CALIBRATE_EVENT, LOGS_FORMAT, VOLUME_KEY, \
-    CLICKTRACK_VOLUME_EVENT, LATENCY_EVENT, LATENCY_KEY, START_EVENT, BACKLOOP_EVENT, RESET_EVENT, TRACK_KEY, \
-    BARS_TO_RECORD_KEY, DEFAULT_BPM, MAJOR_VERSION_EVENT, MAJOR_VERSION
+    CLICKTRACK_VOLUME_EVENT, LATENCY_EVENT, LATENCY_KEY, START_EVENT, \
+    BACKLOOP_EVENT, RESET_EVENT, TRACK_KEY, \
+    BARS_TO_RECORD_KEY, DEFAULT_BPM, MAJOR_VERSION_EVENT, MAJOR_VERSION, \
+    USING_AUTOMATIC_LATENCY_CORRECTION_KEY
 from backlooper.session import Session
 
 if __name__ == "__main__":
@@ -63,7 +66,8 @@ if __name__ == "__main__":
         await session.send_tracks_update()
         await websocket.send(json.dumps({
             EVENT_TYPE_KEY: MAJOR_VERSION_EVENT,
-            MESSAGE_KEY: MAJOR_VERSION
+            MESSAGE_KEY: MAJOR_VERSION,
+            USING_AUTOMATIC_LATENCY_CORRECTION_KEY: bool(audio.using_automatic_latency_correction.value),
         }))
         logger.debug('GUI connected')
 

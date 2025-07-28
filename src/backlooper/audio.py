@@ -52,6 +52,8 @@ class AudioStream:
     """ TODO """
 
     def __post_init__(self):
+        self.using_automatic_latency_correction = Value(_SHARED_INT_TYPE, 0)
+
         self._clicktrack_bpm = Value(_SHARED_FLOAT_TYPE, _DEFAULT_BPM_VALUE)
         self._clicktrack_origin = Value(_SHARED_FLOAT_TYPE, _DEFAULT_ORIGIN_VALUE)
 
@@ -63,7 +65,6 @@ class AudioStream:
         self._previous_dac_time = None
         self._loop_start_end_times = ShareableList([_DEFAULT_LOOPER_VALUE, _DEFAULT_LOOPER_VALUE, 0] * NUMBER_OF_TRACKS)
         self._latency_samples = Value(_SHARED_INT_TYPE, 0)
-        self._using_automatic_latency_correction = Value(_SHARED_INT_TYPE, 0)
         self._clicktrack_volume = Value(_SHARED_FLOAT_TYPE, 1)
         self._clicktrack = clicktrack()
         self._clicktrack_first_beat = clicktrack(volume_multiplier=3)
@@ -101,7 +102,7 @@ class AudioStream:
                 self.latency_seconds - (output_time-input_time)
         ) > latency_update_threshold_seconds:
             self.latency_seconds = output_time-input_time
-            self._using_automatic_latency_correction.value = 1
+            self.using_automatic_latency_correction.value = 1
 
         start_of_callback = time.time()
 
