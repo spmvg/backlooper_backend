@@ -83,15 +83,14 @@ class AudioStream:
         if self._samples_origin.value != self._samples_origin.value:
             self._samples_origin.value = time.time()
 
-        start_of_callback = time.time()
+        actual_latency_seconds = callback_time.outputBufferDacTime-callback_time.inputBufferAdcTime
+        latency_update_threshold_seconds = 0.002
+        if abs(
+                self.latency_seconds - actual_latency_seconds
+        ) > latency_update_threshold_seconds:
+            self.latency_seconds = actual_latency_seconds
 
-        if self._previous_dac_time and not (
-                (callback_time.outputBufferDacTime - self._previous_dac_time) / self._time_between_blocks <= 2
-        ):
-            self._logger.warning(
-                f'Delay between callbacks unexpected: actual {callback_time.outputBufferDacTime - self._previous_dac_time} '
-                f'vs. expected {self._time_between_blocks}. This can be the result of packet loss.'
-            )
+        start_of_callback = time.time()
 
         self._storage.write(
             self._current_index,
@@ -168,7 +167,7 @@ class AudioStream:
         if (time.time() - start_of_callback) / self._time_between_blocks > 0.5:
             self._logger.warning(
                 f'The callback function took relatively long to run: actual {time.time() - start_of_callback} '
-                f'vs. expected {self._time_between_blocks}. This can result in audio glitches.'
+                f'is close to the limit {self._time_between_blocks}. This can result in audio glitches.'
             )
 
     def run(self):
@@ -212,10 +211,9 @@ class AudioStream:
             self._input_latency_seconds = input_device_dict[default_low_input_latency_field]
             self._output_latency_seconds = output_device_dict[default_low_output_latency_field]
             self._logger.info(f'Using input device {self.input_device_id}: {input_device}')
-            self._logger.info(f'Input latency: {self._input_latency_seconds:.3f} s')
+            self._logger.debug(f'Input latency as declared by device: {self._input_latency_seconds:.3f} s')
             self._logger.info(f'Using output device {self.output_device_id}: {output_device}')
-            self._logger.info(f'Output latency: {self._output_latency_seconds:.3f} s')
-            self.latency_seconds = self._input_latency_seconds + self._output_latency_seconds
+            self._logger.debug(f'Output latency as declared by device: {self._output_latency_seconds:.3f} s')
 
             # session is running, so now we can open the browser
             # webbrowser.open("https://www.backlooper.app/")  # TODO: remove again before release
