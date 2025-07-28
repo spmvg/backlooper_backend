@@ -202,7 +202,7 @@ class AudioStream:
                 channels=self.channels,
                 blocksize=self.block_size,
                 callback=self.callback,
-                device=(self.input_device_id, self.output_device_id),  # TODO: make configurable
+                device=(self.input_device_id, self.output_device_id),
                 latency=('low', 'low'),
         ) as stream:
             input_device_id, output_device_id = stream.device
@@ -231,7 +231,7 @@ class AudioStream:
             self.latency_seconds = self._input_latency_from_device_seconds + self._output_latency_from_device_seconds
 
             # session is running, so now we can open the browser
-            # webbrowser.open("https://www.backlooper.app/")  # TODO: remove again before release
+            webbrowser.open("https://www.backlooper.app/")
 
             while True:
                 sleep(int(duration * 1000))
