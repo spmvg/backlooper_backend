@@ -44,12 +44,12 @@ class AudioStream:
     """Number of samples that are handled at one time by the ``callback`` function."""
     sample_rate: Optional[int] = 44100
     """Sample rate of the audio interface."""
-    log_level: int = logging.DEBUG
-    """Log level"""
+    log_level: int = logging.INFO
+    """Log level."""
     input_device_id: Optional[int] = None
-    """ TODO """
+    """Input device to use. Will use system default if empty."""
     output_device_id: Optional[int] = None
-    """ TODO """
+    """Output device to use. Will use system default if empty."""
 
     def __post_init__(self):
         self.using_automatic_latency_correction = Value(_SHARED_INT_TYPE, 0)
@@ -190,7 +190,7 @@ class AudioStream:
         """
         duration = 1  # seconds. Increasing this value causes delay on exit.
         self._logger = logging.getLogger(__name__)
-        self._logger.setLevel(logging.INFO)  # TODO: make INFO on release
+        self._logger.setLevel(self.log_level)
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)
