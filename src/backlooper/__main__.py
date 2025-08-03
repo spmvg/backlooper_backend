@@ -14,6 +14,7 @@ import logging
 import multiprocessing
 from json import JSONDecodeError
 
+from sounddevice import query_devices
 import websockets
 
 from backlooper.audio import AudioStream
@@ -29,8 +30,6 @@ from backlooper.session import Session
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     parser = argparse.ArgumentParser(description='Backlooper')
-    parser.add_argument('--input-device-id', help='ID (integer) of the input device to use. Run once without this argument and check the logs to see which IDs are available.', type=int)
-    parser.add_argument('--output-device-id', help='ID (integer) of the output device to use. Run once without this argument and check the logs to see which IDs are available.', type=int)
     parser.add_argument('--debug', help='Enable debug logging', action='store_true')
     args = parser.parse_args()
     log_level = logging.INFO
@@ -43,10 +42,24 @@ if __name__ == "__main__":
     screen_handler.setFormatter(logging.Formatter(LOGS_FORMAT))
     logger.addHandler(screen_handler)
 
+    logger.info('Available sound devices:\n\n%s\n', query_devices())
+
+    # Prompt user for input and output device IDs
+    try:
+        input_device_id = int(input('Enter the input device ID (integer): '))
+    except ValueError:
+        logger.error('Invalid input device ID. Please enter an integer.')
+        exit(1)
+    try:
+        output_device_id = int(input('Enter the output device ID (integer): '))
+    except ValueError:
+        logger.error('Invalid output device ID. Please enter an integer.')
+        exit(1)
+
     audio = AudioStream(
         log_level=log_level,
-        input_device_id=args.input_device_id,
-        output_device_id=args.output_device_id,
+        input_device_id=input_device_id,
+        output_device_id=output_device_id,
     )
 
     session = Session(

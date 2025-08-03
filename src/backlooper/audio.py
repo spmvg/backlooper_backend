@@ -195,8 +195,6 @@ class AudioStream:
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)
 
-        self._logger.info('Available sound devices:\n\n%s\n', query_devices())
-
         with Stream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
