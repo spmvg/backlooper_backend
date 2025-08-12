@@ -44,10 +44,16 @@ class AudioStream:
     """Number of samples that are handled at one time by the ``callback`` function."""
     sample_rate: Optional[int] = 44100
     """Sample rate of the audio interface."""
-    log_level: int = logging.DEBUG
-    """Log level"""
+    log_level: int = logging.INFO
+    """Log level."""
+    input_device_id: Optional[int] = None
+    """Input device to use. Will use system default if empty."""
+    output_device_id: Optional[int] = None
+    """Output device to use. Will use system default if empty."""
 
     def __post_init__(self):
+        self.using_automatic_latency_correction = Value(_SHARED_INT_TYPE, 0)
+
         self._clicktrack_bpm = Value(_SHARED_FLOAT_TYPE, _DEFAULT_BPM_VALUE)
         self._clicktrack_origin = Value(_SHARED_FLOAT_TYPE, _DEFAULT_ORIGIN_VALUE)
 
@@ -63,6 +69,9 @@ class AudioStream:
         self._clicktrack = clicktrack()
         self._clicktrack_first_beat = clicktrack(volume_multiplier=3)
         self._logger = None
+        self._input_latency_from_device_seconds = None
+        self._output_latency_from_device_seconds = None
+        self._driver_warning_printed = False
 
     def callback(self, indata, outdata, frames, callback_time, status):
         """
@@ -77,15 +86,25 @@ class AudioStream:
         if self._samples_origin.value != self._samples_origin.value:
             self._samples_origin.value = time.time()
 
-        start_of_callback = time.time()
-
-        if self._previous_dac_time and not (
-                (callback_time.outputBufferDacTime - self._previous_dac_time) / self._time_between_blocks <= 2
-        ):
+        output_time = callback_time.outputBufferDacTime
+        input_time = callback_time.inputBufferAdcTime
+        if (not input_time or not output_time) and not self._driver_warning_printed:
             self._logger.warning(
-                f'Delay between callbacks unexpected: actual {callback_time.outputBufferDacTime - self._previous_dac_time} '
-                f'vs. expected {self._time_between_blocks}. This can be the result of packet loss.'
+                'Your audio driver does not support inputBufferAdcTime and/or '
+                'outputBufferDacTime. If you want automatic latency '
+                'correction, please use an audio device '
+                'with ASIO drivers. You must calibrate now to set the '
+                'latency correctly.'
             )
+            self._driver_warning_printed = True
+        latency_update_threshold_seconds = 0.002
+        if input_time and output_time and abs(
+                self.latency_seconds - (output_time-input_time)
+        ) > latency_update_threshold_seconds:
+            self.latency_seconds = output_time-input_time
+            self.using_automatic_latency_correction.value = 1
+
+        start_of_callback = time.time()
 
         self._storage.write(
             self._current_index,
@@ -162,7 +181,7 @@ class AudioStream:
         if (time.time() - start_of_callback) / self._time_between_blocks > 0.5:
             self._logger.warning(
                 f'The callback function took relatively long to run: actual {time.time() - start_of_callback} '
-                f'vs. expected {self._time_between_blocks}. This can result in audio glitches.'
+                f'is close to the limit {self._time_between_blocks}. This can result in audio glitches.'
             )
 
     def run(self):
@@ -171,26 +190,43 @@ class AudioStream:
         """
         duration = 1  # seconds. Increasing this value causes delay on exit.
         self._logger = logging.getLogger(__name__)
-        self._logger.setLevel(logging.DEBUG)
+        self._logger.setLevel(self.log_level)
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)
+
         with Stream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
                 blocksize=self.block_size,
                 callback=self.callback,
+                device=(self.input_device_id, self.output_device_id),
+                latency=('low', 'low'),
         ) as stream:
             input_device_id, output_device_id = stream.device
+
             device_name_field = 'name'
-            input_device = query_devices(input_device_id)[device_name_field]
-            output_device = query_devices(output_device_id)[device_name_field]
-            self._logger.info(f'Using input device: {input_device}')
-            self._logger.info(f'Using output device: {output_device}')
-            self._logger.info(
-                f'If an input or output device should be changed, please adjust the current settings of the OS '
-                f'and restart this application. The default input and output device will be taken.'
+            default_low_input_latency_field = 'default_low_input_latency'
+            default_low_output_latency_field = 'default_low_output_latency'
+            input_device_dict = query_devices(input_device_id)
+            self._logger.debug(
+                'Input device: %s',
+                input_device_dict,
             )
+            output_device_dict = query_devices(output_device_id)
+            self._logger.debug(
+                'Output device: %s',
+                output_device_dict,
+            )
+            input_device = input_device_dict[device_name_field]
+            output_device = output_device_dict[device_name_field]
+            self._input_latency_from_device_seconds = input_device_dict[default_low_input_latency_field]
+            self._output_latency_from_device_seconds = output_device_dict[default_low_output_latency_field]
+            self._logger.info(f'Using input device {input_device_id}: {input_device}')
+            self._logger.debug(f'Input latency as declared by device: {self._input_latency_from_device_seconds:.3f} s')
+            self._logger.info(f'Using output device {output_device_id}: {output_device}')
+            self._logger.debug(f'Output latency as declared by device: {self._output_latency_from_device_seconds:.3f} s')
+            self.latency_seconds = self._input_latency_from_device_seconds + self._output_latency_from_device_seconds
 
             # session is running, so now we can open the browser
             webbrowser.open("https://www.backlooper.app/")

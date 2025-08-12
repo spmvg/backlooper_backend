@@ -14,13 +14,17 @@ import logging
 import multiprocessing
 from json import JSONDecodeError
 
+from sounddevice import query_devices
 import websockets
 
 from backlooper.audio import AudioStream
-from backlooper.config import EVENT_TYPE_KEY, INITIALIZE_EVENT, ERROR_EVENT, MESSAGE_KEY, SET_BPM_EVENT, \
+from backlooper.config import EVENT_TYPE_KEY, INITIALIZE_EVENT, ERROR_EVENT, \
+    MESSAGE_KEY, SET_BPM_EVENT, \
     BPM_EVENT, BPM_KEY, STOP_EVENT, CALIBRATE_EVENT, LOGS_FORMAT, VOLUME_KEY, \
-    CLICKTRACK_VOLUME_EVENT, LATENCY_EVENT, LATENCY_KEY, START_EVENT, BACKLOOP_EVENT, RESET_EVENT, TRACK_KEY, \
-    BARS_TO_RECORD_KEY, DEFAULT_BPM, MAJOR_VERSION_EVENT, MAJOR_VERSION
+    CLICKTRACK_VOLUME_EVENT, LATENCY_EVENT, LATENCY_KEY, START_EVENT, \
+    BACKLOOP_EVENT, RESET_EVENT, TRACK_KEY, \
+    BARS_TO_RECORD_KEY, DEFAULT_BPM, MAJOR_VERSION_EVENT, MAJOR_VERSION, \
+    USING_AUTOMATIC_LATENCY_CORRECTION_KEY
 from backlooper.session import Session
 
 if __name__ == "__main__":
@@ -38,13 +42,30 @@ if __name__ == "__main__":
     screen_handler.setFormatter(logging.Formatter(LOGS_FORMAT))
     logger.addHandler(screen_handler)
 
-    audio = AudioStream(log_level=log_level)
+    logger.info('Available sound devices:\n\n%s\n', query_devices())
+
+    # Prompt user for input and output device IDs
+    try:
+        input_device_id = int(input('Enter the input device ID (integer): '))
+    except ValueError:
+        logger.error('Invalid input device ID. Please enter an integer.')
+        exit(1)
+    try:
+        output_device_id = int(input('Enter the output device ID (integer): '))
+    except ValueError:
+        logger.error('Invalid output device ID. Please enter an integer.')
+        exit(1)
+
+    audio = AudioStream(
+        log_level=log_level,
+        input_device_id=input_device_id,
+        output_device_id=output_device_id,
+    )
 
     session = Session(
         bpm=DEFAULT_BPM,
         audio=audio,
     )
-    session.audio.latency_seconds = 0
 
     async def handle_initialize(websocket, event):
         session.register_websocket(websocket)
@@ -56,12 +77,12 @@ if __name__ == "__main__":
             EVENT_TYPE_KEY: CLICKTRACK_VOLUME_EVENT,
             VOLUME_KEY: session.audio.clicktrack_volume
         }))
-        if session.audio.latency_seconds != 0:
-            await session.send_latency_update()
+        await session.send_latency_update()
         await session.send_tracks_update()
         await websocket.send(json.dumps({
             EVENT_TYPE_KEY: MAJOR_VERSION_EVENT,
-            MESSAGE_KEY: MAJOR_VERSION
+            MESSAGE_KEY: MAJOR_VERSION,
+            USING_AUTOMATIC_LATENCY_CORRECTION_KEY: bool(audio.using_automatic_latency_correction.value),
         }))
         logger.debug('GUI connected')
 
