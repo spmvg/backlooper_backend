@@ -54,7 +54,6 @@ class StripedStorage:
     def __post_init__(self):
         self._stripe_size_bytes = self._empty_storage().nbytes
         self._memory_handles = {}  # TODO: garbage collecting
-        self._unique_prefix = self.identifier + '-'
 
     def _empty_storage(self):
         """Returns a stripe without any data."""
@@ -66,11 +65,11 @@ class StripedStorage:
         requested data.
         ``start_index`` can be bigger than the stripe size.
         """
-        return self._unique_prefix + str(floor(start_index / self.stripe_size)), start_index % self.stripe_size
+        return self.identifier + str(floor(start_index / self.stripe_size)), start_index % self.stripe_size
 
     def _key_offset_to_index(self, key: KeyOffset) -> int:
         """Inverse of ``_index_to_key_offset``."""
-        return int(key[0][len(self._unique_prefix):]) * self.stripe_size + key[1]
+        return int(key[0][len(self.identifier):]) * self.stripe_size + key[1]
 
     def read(
             self,

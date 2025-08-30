@@ -6,6 +6,7 @@ Information is shared by ``multiprocessing``.
 The audio interface is controlled by ``sounddevice``.
 """
 
+import hashlib
 import logging
 import time
 import webbrowser
@@ -28,6 +29,7 @@ _DEFAULT_BPM_VALUE = float('nan')
 _SHARED_FLOAT_TYPE = 'd'
 _SHARED_INT_TYPE = 'i'
 _LOOPER_FIELDS_PER_TRACK = 3
+_IDENTIFIER_LENGTH = 7  # since KeyOffset name can be max. 14 on BSD, use 7 for the identifier
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +59,8 @@ class AudioStream:
         self._clicktrack_bpm = Value(_SHARED_FLOAT_TYPE, _DEFAULT_BPM_VALUE)
         self._clicktrack_origin = Value(_SHARED_FLOAT_TYPE, _DEFAULT_ORIGIN_VALUE)
 
-        self._storage_identifier = uuid4()
-        self._storage = StripedStorage(identifier=str(self._storage_identifier))
+        self._storage_identifier = hashlib.sha256(str(uuid4()).encode()).hexdigest()[:_IDENTIFIER_LENGTH]
+        self._storage = StripedStorage(identifier=self._storage_identifier)
         self._time_between_blocks = self.block_size / self.sample_rate
         self._current_index = 0  # time when _samples_origin is initialized, has _current_index 0
         self._samples_origin = Value(_SHARED_FLOAT_TYPE, _DEFAULT_ORIGIN_VALUE)
