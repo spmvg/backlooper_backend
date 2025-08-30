@@ -25,22 +25,22 @@ class TestStripedStorage(TestCase):
             array_to_store=audio
         )
         desired_storage = {
-            prefix + '-33': np.array([
+            prefix + '33': np.array([
                 [0., 1.],
                 [2., 3.],
                 [4., 5.]
             ]),
-            prefix + '-34': np.array([
+            prefix + '34': np.array([
                 [6., 7.],
                 [8., 9.],
                 [10., 11.]
             ]),
-            prefix + '-35': np.array([
+            prefix + '35': np.array([
                 [12., 13.],
                 [14., 15.],
                 [16., 17.]
             ]),
-            prefix + '-36': np.array([
+            prefix + '36': np.array([
                 [18., 19.],
                 [20., 21.],
                 [0., 0.]
@@ -78,22 +78,22 @@ class TestStripedStorage(TestCase):
             overwrite=False,
         )
         desired_storage = {
-            prefix + '-33': 2*np.array([
+            prefix + '33': 2*np.array([
                 [0., 1.],
                 [2., 3.],
                 [4., 5.]
             ]),
-            prefix + '-34': 2*np.array([
+            prefix + '34': 2*np.array([
                 [6., 7.],
                 [8., 9.],
                 [10., 11.]
             ]),
-            prefix + '-35': 2*np.array([
+            prefix + '35': 2*np.array([
                 [12., 13.],
                 [14., 15.],
                 [16., 17.]
             ]),
-            prefix + '-36': 2*np.array([
+            prefix + '36': 2*np.array([
                 [18., 19.],
                 [20., 21.],
                 [0., 0.]
@@ -125,17 +125,17 @@ class TestStripedStorage(TestCase):
             array_to_store=audio
         )
         desired_storage = {
-            prefix + '-33': np.array([
+            prefix + '33': np.array([
                 [0., 0.],
                 [0., 0.],
                 [0., 1.]
             ]),
-            prefix + '-34': np.array([
+            prefix + '34': np.array([
                 [2., 3.],
                 [4., 5.],
                 [6., 7.]
             ]),
-            prefix + '-35': np.array([
+            prefix + '35': np.array([
                 [8., 9.],
                 [10., 11.],
                 [12., 13.]
@@ -166,7 +166,7 @@ class TestStripedStorage(TestCase):
             array_to_store=audio
         )
         desired_storage = {
-            prefix + '-33': np.array([
+            prefix + '33': np.array([
                 [0., 0.],
                 [1., 2.],
                 [0., 0.]
@@ -247,7 +247,7 @@ class TestStripedStorage(TestCase):
         prefix = str(uuid4())
         storage = StripedStorage(identifier=prefix, stripe_size=100)
         self.assertEqual(
-            (prefix+'-11', 50),
+            (prefix+'11', 50),
             storage._index_to_key_offset(1150)
         )
 
@@ -256,5 +256,5 @@ class TestStripedStorage(TestCase):
         storage = StripedStorage(identifier=prefix, stripe_size=100)
         self.assertEqual(
             1150,
-            storage._key_offset_to_index((prefix+'-11', 50))
+            storage._key_offset_to_index((prefix+'11', 50))
         )
