@@ -29,7 +29,7 @@ _DEFAULT_BPM_VALUE = float('nan')
 _SHARED_FLOAT_TYPE = 'd'
 _SHARED_INT_TYPE = 'i'
 _LOOPER_FIELDS_PER_TRACK = 3
-_IDENTIFIER_LENGTH = 7  # since KeyOffset name can be max. 14 on BSD, use 7 for the identifier
+_IDENTIFIER_LENGTH = 7  # since KeyOffset name can be max. 14 on macOS, use 7 for the identifier
 
 logger = logging.getLogger(__name__)
 
