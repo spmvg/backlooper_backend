@@ -8,3 +8,4 @@ build
 latency_calibration_diagram.png
 .vs
 *.spec
+.venv
