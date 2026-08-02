@@ -38,8 +38,8 @@ sphinx-build -M html docs build
 - Setup script
     - Workaround for [too many open files](https://github.com/spmvg/backlooper_backend/issues/3), necessary after every reboot.
     - Configure the Focusrite device ID.
-```
-ulimit -n 999999999
+```bash
+ulimit -n 1048576  # ideally higher, but this is the maximum on a Raspberry Pi. Should be enough for 27h
 export INPUT_DEVICE_ID=0
 export OUTPUT_DEVICE_ID=0
 ```
