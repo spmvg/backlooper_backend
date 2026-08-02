@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import multiprocessing
+import os
 from json import JSONDecodeError
 
 from sounddevice import query_devices
@@ -44,17 +45,27 @@ if __name__ == "__main__":
 
     logger.info('Available sound devices:\n\n%s\n', query_devices())
 
-    # Prompt user for input and output device IDs
-    try:
-        input_device_id = int(input('Enter the input device ID (integer): '))
-    except ValueError:
-        logger.error('Invalid input device ID. Please enter an integer.')
-        exit(1)
-    try:
-        output_device_id = int(input('Enter the output device ID (integer): '))
-    except ValueError:
-        logger.error('Invalid output device ID. Please enter an integer.')
-        exit(1)
+    _input_device_id_env = os.environ.get('INPUT_DEVICE_ID')
+    if _input_device_id_env is not None:
+        logger.info('Taking input device ID from INPUT_DEVICE_ID env var: %s', _input_device_id_env)
+        input_device_id = int(_input_device_id_env)
+    else:
+        try:
+            input_device_id = int(input('Enter the input device ID (integer): '))
+        except ValueError:
+            logger.error('Invalid input device ID. Please enter an integer.')
+            exit(1)
+
+    _output_device_id_env = os.environ.get('OUTPUT_DEVICE_ID')
+    if _output_device_id_env is not None:
+        logger.info('Taking output device ID from OUTPUT_DEVICE_ID env var: %s', _output_device_id_env)
+        output_device_id = int(_output_device_id_env)
+    else:
+        try:
+            output_device_id = int(input('Enter the output device ID (integer): '))
+        except ValueError:
+            logger.error('Invalid output device ID. Please enter an integer.')
+            exit(1)
 
     audio = AudioStream(
         log_level=log_level,
