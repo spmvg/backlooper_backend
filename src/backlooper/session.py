@@ -4,25 +4,27 @@ states.
 Big parts use ``asyncio`` so that functions can be handled asynchronously.
 """
 import asyncio
-import json
 import logging
 import math
 import time
-from base64 import b64encode
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
-from io import BytesIO
 from typing import Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from websockets.exceptions import ConnectionClosedOK
-from websockets.server import WebSocketServerProtocol
 
 from backlooper.audio import AudioStream
-from backlooper.config import EVENT_TYPE_KEY, BEAT_KEY, TEMPO_EVENT, TRACKS_EVENT, TRACKS_KEY, LATENCY_EVENT, LATENCY_KEY, \
-    BEATS_PER_BAR, NUMBER_OF_TRACKS, CALIBRATION_RESULT_EVENT, FIGURE_KEY, MESSAGE_KEY
+from backlooper.config import BEATS_PER_BAR, NUMBER_OF_TRACKS
+from backlooper.lcd import LCDScreen
+
+_TRACK_CHARS = {
+    'EMPTY': '_',
+    'TRIGGERED': 'T',
+    'RECORDING': 'O',
+    'PLAYING': '>',
+    'STOPPING': 'x',
+    'STOPPED': 'X',
+}
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +66,12 @@ class Session:
     """Tempo of the session in beats per minute."""
     audio: AudioStream
     """Manages the audio stream and interface."""
+    screen: LCDScreen
 
     def __post_init__(self):
         self.origin: Optional[float] = None
         self.current_bar: Optional[int] = None
-
         self._initialize_tracks()
-
-        self._websocket: Optional[WebSocketServerProtocol] = None
 
     def _initialize_tracks(self):
         self.tracks = {
@@ -90,23 +90,15 @@ class Session:
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin
         self.audio.play()
+        self._send_status('Initialized')
 
     async def click(self):
-        """Sends updates to the frontend about the current beat. Loops indefinitely."""
+        """Tracks the current beat and bar internally. Loops indefinitely."""
         while True:
             now = time.time()
             absolute_beat_number = round(self._absolute_beat_number(now))
             self.current_beat = (absolute_beat_number % BEATS_PER_BAR) + 1  # one-indexed
             self.current_bar = math.floor(absolute_beat_number / BEATS_PER_BAR)
-
-            if self._websocket:
-                try:
-                    await self._websocket.send(json.dumps({
-                        EVENT_TYPE_KEY: TEMPO_EVENT,
-                        BEAT_KEY: self.current_beat,
-                    }))
-                except ConnectionClosedOK:
-                    self._websocket = None
 
             next_time_diff = (
                 self.origin + (absolute_beat_number + 1) * self._get_seconds_per_beat()
@@ -123,16 +115,10 @@ class Session:
 
     async def set_bpm(self, bpm: int):
         """Updates the tempo."""
-        if not self._websocket:
-            return
         self.bpm = bpm
         self.origin = (time.time() + 0.5 * self._get_seconds_per_beat())  # prevent scratch noise when sliding BPM
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin
-
-    def register_websocket(self, websocket: WebSocketServerProtocol):
-        """Stores the websocket for communication towards the frontend."""
-        self._websocket = websocket
 
     async def request_recording(
             self,
@@ -140,7 +126,7 @@ class Session:
             bars_to_record: int,
     ):
         """Records the previous ``bars_to_record`` bars for track ``track_id`` and starts playing."""
-        if not self.current_bar or not self._websocket:
+        if not self.current_bar:
             return
 
         track = self.tracks.get(track_id)
@@ -174,6 +160,7 @@ class Session:
         track.start_timestamp = bar_start_time
         track.end_timestamp = bar_end_time
         track.state = TrackState.RECORDING
+        self._send_status('Recording')
         await self.send_tracks_update()
 
         time_to_wait = bar_end_time - time.time()
@@ -189,6 +176,7 @@ class Session:
         )
         # TODO: there is no crossfading yet for the first end-start transition
 
+        self._send_status('Playing')
         await self.send_tracks_update()
         logger.debug('Tracks state set to PLAYING.')
 
@@ -244,7 +232,7 @@ class Session:
         track_id: int,
     ):
         """Starts playing a track ``track_id`` for which recording already has taken place."""
-        if not self.current_bar or not self._websocket:
+        if not self.current_bar:
             return
 
         track = self.tracks.get(track_id)
@@ -255,6 +243,7 @@ class Session:
             logger.warning('Cannot start playing for a track in state %s: %s', track.state, track_id)
             return
         track.state = TrackState.TRIGGERED
+        self._send_status('Triggered')
         await self.send_tracks_update()
 
         bar_start_time, _ = self._get_bar_interval(
@@ -268,6 +257,7 @@ class Session:
             await asyncio.sleep(time_to_wait)
 
         track.state = TrackState.PLAYING
+        self._send_status('Playing')
         start_timestamp = float(track.start_timestamp + self.audio.latency_seconds)
         end_timestamp = float(track.end_timestamp + self.audio.latency_seconds)
         offset = (bar_start_time - track.start_timestamp) % (track.end_timestamp - track.start_timestamp)
@@ -285,7 +275,7 @@ class Session:
         track_id: int,
     ):
         """Stops playing a track ``track_id``."""
-        if not self.current_bar or not self._websocket:
+        if not self.current_bar:
             return
 
         track = self.tracks.get(track_id)
@@ -296,6 +286,7 @@ class Session:
             logger.warning('Cannot stop playing for a track in state %s: %s', track.state, track_id)
             return
         track.state = TrackState.STOPPING
+        self._send_status('Stopping')
         await self.send_tracks_update()
 
         bar_start_time, _ = self._get_bar_interval(
@@ -309,157 +300,27 @@ class Session:
             await asyncio.sleep(time_to_wait)
 
         track.state = TrackState.STOPPED
+        self._send_status('Stopped')
         self.audio.reset_loop(track.track_id)
         await self.send_tracks_update()
         logger.debug('Recording stopped')
 
     async def reset(self):
         """Resets all tracks to their starting state."""
-        if not self.current_bar or not self._websocket:
+        if not self.current_bar:
             return
 
         for track_id in self.tracks.keys():
             self.audio.reset_loop(track_id)
         self._initialize_tracks()
+        self._send_status('Reset')
         await self.send_tracks_update()
         # TODO: empty memory
 
-    async def calibrate(self):
-        """Executes the calibration routine to determine round-trip latency."""
-        plt.rcParams.update({'font.size': 22})
+    async def send_tracks_update(self) -> None:
+        """Renders the 8-track state as a 9-character string on LCD row 0."""
+        chars = [_TRACK_CHARS[self.tracks[i].state] for i in range(NUMBER_OF_TRACKS)]
+        self.screen.write_line(0, ''.join(chars[:4]) + ' ' + ''.join(chars[4:]))
 
-        bpm_for_calibration = 30
-        time_to_wait_while_calibrate_records = 9
-
-        self.audio.clicktrack_bpm = bpm_for_calibration
-        start_time = time.time()
-        self.audio.clicktrack_origin = start_time
-
-        logger.debug('Waiting %s seconds to record some loopback', time_to_wait_while_calibrate_records)
-        await asyncio.sleep(time_to_wait_while_calibrate_records)
-        logger.debug('Recording loopback complete')
-
-        recording = self.audio.read(
-            start_timestamp=start_time,
-            end_timestamp=start_time + time_to_wait_while_calibrate_records,
-        )
-        mono_recording = np.abs((recording[:, 0] + recording[:, 1]) / 2)
-        noise_level = np.percentile(mono_recording, 75)
-        signal_threshold = 10
-        threshold = noise_level * signal_threshold
-
-        recording_column = 'Absolute recording'
-        mono_recording_df = pd.DataFrame(
-            {recording_column: mono_recording},
-            index=np.arange(mono_recording.shape[0]) / self.audio.sample_rate
-        )
-
-        time_between_beats = (60 / bpm_for_calibration)
-        beats_in_recording = math.floor(time_to_wait_while_calibrate_records / time_between_beats)
-
-        fig = plt.figure(figsize=(10, 7))
-        ax = plt.gca()
-        ax.semilogy(
-            mono_recording_df.index,
-            mono_recording_df[recording_column],
-            '.',
-            alpha=.5,
-            label=recording_column,
-        )
-        ax.axhline(
-            threshold,
-            color='r',
-            linestyle='--',
-            alpha=.8,
-            label='Threshold'
-        )
-        ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Signal (arbitrary unit)')
-        ax.set_xlim(0, None)
-        ax.legend(loc='upper right')
-        ax.grid()
-        ax.set_title(rf'Latency calibration finished with error')
-        fig.tight_layout()
-
-        measured_latencies = []
-        for beat in range(1, beats_in_recording):  # skip first and last
-            beat_content = mono_recording_df[beat * time_between_beats:(beat + 1) * time_between_beats]
-            threshold_exceeded_time = beat_content[
-                beat_content[recording_column] > threshold
-                ].index.min()
-            if pd.isnull(threshold_exceeded_time):
-                logger.warning(
-                    f'Missing threshold exceedance in beat {beat}. Check the latency calibration diagram for more '
-                    f'information. Try increasing the signal-to-noise ratio.'
-                )
-                await self.send_calibration_diagram("FAIL")
-                return
-            measured_latencies.append(threshold_exceeded_time - beat * time_between_beats)
-
-            ax.axvline(
-                beat * time_between_beats,
-                color='k',
-                linestyle='-',
-                alpha=.8,
-                label='Expected beats' if beat == 1 else None
-            )
-            ax.axvline(
-                threshold_exceeded_time,
-                color='k',
-                linestyle='--',
-                alpha=.8,
-                label='Actual beats' if beat == 1 else None
-            )
-
-        latency = np.average(measured_latencies)
-        latency_error = np.std(measured_latencies)
-
-        ax.legend(loc='upper right')
-        ax.set_title(rf'Latency calibration: ${round(1000 * latency)} \pm {round(1000 * latency_error)}$ ms')
-
-        self.audio.latency_seconds = latency
-        self.audio.clicktrack_bpm = self.bpm
-        self.audio.clicktrack_origin = self.origin
-
-        await self.send_latency_update()
-        await self.send_calibration_diagram("SUCCESS")
-
-    async def send_calibration_diagram(
-            self,
-            message: str,
-    ):
-        """Sends the calibration diagram to the frontend."""
-        if not self._websocket:
-            logger.warning('Cannot send calibration diagram because there is no websocket.')
-            return
-
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png')
-        buffer.seek(0)
-        await self._websocket.send(json.dumps({
-            EVENT_TYPE_KEY: CALIBRATION_RESULT_EVENT,
-            FIGURE_KEY: b64encode(buffer.read()).decode(),
-            MESSAGE_KEY: message,
-        }))
-
-    async def send_tracks_update(self):
-        """Sends the current state of all tracks to the frontend."""
-        if not self._websocket:
-            logger.warning('Cannot send tracks update because there is no websocket.')
-            return
-        await self._websocket.send(json.dumps({
-            EVENT_TYPE_KEY: TRACKS_EVENT,
-            TRACKS_KEY: [
-                asdict(track) for track in self.tracks.values()
-            ],
-        }))
-
-    async def send_latency_update(self):
-        """Sends the currently configured latency to the frontend."""
-        if not self._websocket:
-            logger.warning('Cannot send tracks update because there is no websocket.')
-            return
-        await self._websocket.send(json.dumps({
-            EVENT_TYPE_KEY: LATENCY_EVENT,
-            LATENCY_KEY: self.audio.latency_seconds
-        }))
+    def _send_status(self, message: str) -> None:
+        self.screen.write_line(1, message)
