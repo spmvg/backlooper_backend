@@ -10,9 +10,12 @@ import os
 
 from sounddevice import query_devices
 
+import mido
+
 from backlooper.audio import AudioStream
 from backlooper.config import DEFAULT_BPM, LOGS_FORMAT
 from backlooper.lcd import LCDScreen
+from backlooper.midi import MidiController
 from backlooper.session import Session
 
 if __name__ == "__main__":
@@ -60,14 +63,43 @@ if __name__ == "__main__":
         output_device_id=output_device_id,
     )
 
+    _midi_port_env = os.environ.get('MIDI_PORT_NAME')
+    midi_port_name = None
+    _midi_ports = mido.get_input_names()
+    if not _midi_ports:
+        logger.warning('No MIDI input ports found; MIDI disabled')
+    elif _midi_port_env is not None:
+        logger.info('Taking MIDI port from MIDI_PORT_NAME env var: %s', _midi_port_env)
+        midi_port_name = _midi_port_env
+    else:
+        logger.info(
+            'Available MIDI ports:\n%s',
+            '\n'.join(f'  {i}: {name}' for i, name in enumerate(_midi_ports)),
+        )
+        try:
+            _idx = int(input('Enter the MIDI port index (integer, or -1 to skip): '))
+            if 0 <= _idx < len(_midi_ports):
+                midi_port_name = _midi_ports[_idx]
+        except (ValueError, IndexError):
+            logger.warning('Invalid MIDI port selection, skipping MIDI')
+
+    screen = LCDScreen()
     session = Session(
         bpm=DEFAULT_BPM,
         audio=audio,
-        screen=LCDScreen(),
+        screen=screen,
     )
 
     async def main():
+        loop = asyncio.get_running_loop()
+        midi_ctrl = MidiController(session=session, screen=screen, loop=loop)
+        if midi_port_name:
+            midi_ctrl.open(midi_port_name)
         session.run()
-        await asyncio.Future()  # run forever
+        try:
+            await asyncio.Future()  # run forever
+        finally:
+            midi_ctrl.close()
+            screen.close()
 
     asyncio.run(main())

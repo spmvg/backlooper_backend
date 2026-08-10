@@ -5,6 +5,20 @@ Audio is always being recorded.
 The last few bars will be played back if you select a track at approximately the first beat of the next bar.
 
 Status is shown on a 16×2 LCD screen connected via I2C (HD44780 + PCF8574 backpack).
+Controls are provided by any class-compliant USB MIDI device (buttons + faders).
+
+## MIDI mapping
+Hold any MIDI button for 5 seconds to enter mapping mode.
+The screen then walks through each slot in order — press the physical button or move the fader you want to assign:
+
+| Slot | Type | Action |
+|------|------|--------|
+| Track 1–8 | button | toggle record → play → stop |
+| Volume | fader | click-track volume |
+| Tempo | fader | BPM (60–200) |
+| Reset | button | clear all tracks |
+
+After all 11 slots are assigned, or after 5 s of inactivity, the map is saved and reloaded on the next run.
 
 ## Development setup
 Install the backend locally:
@@ -19,9 +33,10 @@ Run the backend:
 python -m backlooper
 ```
 
-The input and output sound device IDs are prompted on startup.
-To skip the prompt, set the `INPUT_DEVICE_ID` and `OUTPUT_DEVICE_ID` environment variables to the desired integer device IDs.
-Available device IDs are logged on startup.
+The input and output sound device IDs, and the MIDI port, are prompted on startup.
+To skip the prompts, set environment variables:
+- `INPUT_DEVICE_ID` / `OUTPUT_DEVICE_ID` — integer device IDs (listed on startup)
+- `MIDI_PORT_NAME` — exact MIDI port name (or omit / enter `-1` to disable MIDI)
 
 On a machine without `smbus2` or without an I2C bus, LCD output falls back to log messages.
 
@@ -39,4 +54,5 @@ Setup before running:
 ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/issues/3
 export INPUT_DEVICE_ID=0
 export OUTPUT_DEVICE_ID=0
+export MIDI_PORT_NAME="Your MIDI Device:Your MIDI Device MIDI 1 28:0"
 ```
