@@ -81,8 +81,8 @@ class LCDScreen:
     def write_line(self, row: int, text: str) -> None:
         """Write *text* to *row* (0 or 1), truncating/padding to 16 characters."""
         padded = text[:LCD_WIDTH].ljust(LCD_WIDTH)
+        logger.info('LCD row %d: %s', row, padded)
         if not self._available:
-            logger.info('LCD row %d: %s', row, padded)
             return
         self._command(_CMD_DDRAM | _ROW_OFFSETS[row])
         for char in padded:
