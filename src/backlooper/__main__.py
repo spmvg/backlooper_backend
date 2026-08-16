@@ -92,6 +92,8 @@ if __name__ == "__main__":
             await asyncio.Future()  # run forever
         finally:
             midi_ctrl.close()
+            screen.write_line(0, '')
+            screen.write_line(1, 'Backlooper off')
             screen.close()
 
     asyncio.run(main())
