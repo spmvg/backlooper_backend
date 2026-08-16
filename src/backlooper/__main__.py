@@ -72,16 +72,8 @@ if __name__ == "__main__":
         logger.info('Taking MIDI port from MIDI_PORT_NAME env var: %s', _midi_port_env)
         midi_port_name = _midi_port_env
     else:
-        logger.info(
-            'Available MIDI ports:\n%s',
-            '\n'.join(f'  {i}: {name}' for i, name in enumerate(_midi_ports)),
-        )
-        try:
-            _idx = int(input('Enter the MIDI port index (integer, or -1 to skip): '))
-            if 0 <= _idx < len(_midi_ports):
-                midi_port_name = _midi_ports[_idx]
-        except (ValueError, IndexError):
-            logger.warning('Invalid MIDI port selection, skipping MIDI')
+        logger.info('MIDI_PORT_NAME not set; MIDI disabled. Available ports:\n%s',
+                    '\n'.join(f'  {i}: {name}' for i, name in enumerate(_midi_ports)))
 
     screen = LCDScreen()
     session = Session(
