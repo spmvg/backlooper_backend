@@ -9,6 +9,7 @@ export OUTPUT_DEVICE_ID=0
 ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/issues/3
 
 cd ~/backlooper_backend
+git pull
 source .venv/bin/activate
 python -m pip install -e .
 python -m backlooper
