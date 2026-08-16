@@ -1,0 +1,14 @@
+[Unit]
+Description=Backlooper
+After=sound.target systemd-networkd-wait-online.service
+Wants=systemd-networkd-wait-online.service
+
+[Service]
+ExecStart=/bin/bash %h/backlooper_backend/scripts/dev-setup-run.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
