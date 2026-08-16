@@ -2,6 +2,7 @@
 #   - The location of the repository is `~/backlooper_backend`
 #   - The virtual environment is located at `~/backlooper_backend/.venv`
 #   - The input and output devices are both at index 0
+#   - I2C is enabled
 #   - TODO: MIDI
 
 export INPUT_DEVICE_ID=0
