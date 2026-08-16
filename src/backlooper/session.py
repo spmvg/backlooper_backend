@@ -86,6 +86,7 @@ class Session:
 
         loop = asyncio.get_event_loop()
         loop.create_task(self.click())
+        loop.create_task(self.send_tracks_update())
 
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin
