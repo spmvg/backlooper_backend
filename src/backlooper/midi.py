@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 MAPPING_FILE = Path.home() / '.backlooper_midi_map.json'
 LONG_PRESS_SECONDS = 5.0
 MAPPING_TIMEOUT_SECONDS = 5.0
-_DEBOUNCE_SECONDS = 0.3  # minimum gap between two mapping captures
+FIRST_MAPPING_TIMEOUT_SECONDS = MAPPING_TIMEOUT_SECONDS * 2
+FADER_DEBOUNCE_SECONDS = 2.0
 
 
 class ActionType(str, Enum):
@@ -98,6 +99,8 @@ class MidiController:
         self._slot_index = 0
         self._partial_map: Dict[str, Dict] = {}
         self._last_capture_time = 0.0
+        self._fader_accept_after = 0.0
+        self._fader_debounce_timer: Optional[threading.Timer] = None
         self._timeout_timer: Optional[threading.Timer] = None
 
     # ── lifecycle ─────────────────────────────────────────────────────────
@@ -112,7 +115,7 @@ class MidiController:
             self._port.close()
 
     def _cancel_all_timers(self) -> None:
-        for attr in ('_long_press_timer', '_timeout_timer'):
+        for attr in ('_long_press_timer', '_fader_debounce_timer', '_timeout_timer'):
             t = getattr(self, attr, None)
             if t:
                 t.cancel()
@@ -208,6 +211,8 @@ class MidiController:
         self._slot_index = 0
         self._partial_map = {}
         self._last_capture_time = 0.0
+        self._fader_accept_after = 0.0
+        self._fader_debounce_timer = None
         self._show_slot_prompt()
 
     def _show_slot_prompt(self) -> None:
@@ -221,7 +226,8 @@ class MidiController:
     def _reset_timeout(self) -> None:
         if self._timeout_timer:
             self._timeout_timer.cancel()
-        t = threading.Timer(MAPPING_TIMEOUT_SECONDS, self._timeout_fired)
+        timeout = FIRST_MAPPING_TIMEOUT_SECONDS if self._slot_index == 0 else MAPPING_TIMEOUT_SECONDS
+        t = threading.Timer(timeout, self._timeout_fired)
         t.daemon = True
         t.start()
         self._timeout_timer = t
@@ -231,6 +237,9 @@ class MidiController:
         self._finish_mapping()
 
     def _on_mapping_message(self, msg: mido.Message) -> None:
+        if self._fader_debounce_timer is not None:
+            return
+
         # ignore releases (e.g. lifting the long-press key that triggered mapping)
         is_release = msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0)
         if is_release:
@@ -247,9 +256,8 @@ class MidiController:
         if expected == 'fader' and not is_fader:
             return
 
-        # debounce: ignore rapid repeated messages (e.g. many CC events from one fader move)
         now = time.monotonic()
-        if now - self._last_capture_time < _DEBOUNCE_SECONDS:
+        if is_fader and now < self._fader_accept_after:
             self._reset_timeout()
             return
         self._last_capture_time = now
@@ -260,7 +268,21 @@ class MidiController:
             entry['track_id'] = slot['track_id']
         self._partial_map[key] = entry
         logger.info('  mapped %s → %s', key, slot['label'])
+        if is_fader:
+            self._fader_accept_after = now + FADER_DEBOUNCE_SECONDS
+            logger.info('Release the fader; advancing in %.1f seconds', FADER_DEBOUNCE_SECONDS)
+            self._screen.write_line(0, 'Fader mapped')
+            self._screen.write_line(1, 'Release fader')
+            timer = threading.Timer(FADER_DEBOUNCE_SECONDS, self._advance_mapping_slot)
+            timer.daemon = True
+            timer.start()
+            self._fader_debounce_timer = timer
+            return
 
+        self._advance_mapping_slot()
+
+    def _advance_mapping_slot(self) -> None:
+        self._fader_debounce_timer = None
         self._slot_index += 1
         if self._slot_index >= len(_SLOTS):
             logger.info('All %d slots mapped', len(_SLOTS))
