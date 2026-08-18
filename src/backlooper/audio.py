@@ -74,6 +74,17 @@ class AudioStream:
         self._input_latency_from_device_seconds = None
         self._output_latency_from_device_seconds = None
         self._driver_warning_printed = False
+        self._clipping_skip_until = 0.0
+
+    def _log_if_clipping_detected(self, samples: np.ndarray):
+        """Prints a warning if the audio output reaches or exceeds the normalized amplitude limit."""
+        if samples.size == 0 or self._logger is None or time.time() < self._clipping_skip_until:
+            return
+
+        peak = float(np.max(np.abs(samples)))
+        if peak >= 1.0 - 1e-6:
+            print(f'Audio clipping detected. Peak: {peak:.4f}')
+            self._clipping_skip_until = time.time() + 10
 
     def callback(self, indata, outdata, frames, callback_time, status):
         """
@@ -176,6 +187,8 @@ class AudioStream:
             outdata[-end_index_in_clicktrack:] += self._clicktrack_volume.value * click[
                 :end_index_in_clicktrack
             ]
+
+        self._log_if_clipping_detected(outdata)
 
         self._current_index += desired_samples
         self._previous_dac_time = callback_time.outputBufferDacTime
@@ -316,8 +329,7 @@ class AudioStream:
             self,
     ):
         """Starts the audio stream in a separate process."""
-        _audio_process = Process(target=self.run)
-        _audio_process.start()
+        Process(target=self.run).start()
 
     def read(
             self,
