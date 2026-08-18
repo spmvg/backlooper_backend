@@ -6,7 +6,7 @@
 
 export INPUT_DEVICE_ID=0
 export OUTPUT_DEVICE_ID=0
-export MIDI_PORT_NAME='MPK Mini Mk II:MPK Mini Mk II MIDI 1 28:0'
+export MIDI_PORT_MATCH='MPK Mini Mk II'
 
 ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/issues/3
 

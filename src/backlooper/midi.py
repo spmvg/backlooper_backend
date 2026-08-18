@@ -108,9 +108,14 @@ class MidiController:
 
     # ── lifecycle ─────────────────────────────────────────────────────────
 
-    def open(self, port_name: str) -> None:
-        self._port = mido.open_input(port_name, callback=self._on_message)
+    def open(self, port_name: str) -> bool:
+        try:
+            self._port = mido.open_input(port_name, callback=self._on_message)
+        except OSError as exc:
+            logger.warning('Could not open MIDI port %r; MIDI disabled: %s', port_name, exc)
+            return False
         logger.info('MIDI port opened: %s', port_name)
+        return True
 
     def close(self) -> None:
         self._cancel_all_timers()

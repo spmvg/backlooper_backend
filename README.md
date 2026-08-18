@@ -34,10 +34,9 @@ Run the backend:
 python -m backlooper
 ```
 
-The input and output sound device IDs, and the MIDI port, are prompted on startup.
-To skip the prompts, set environment variables:
+The input and output sound device IDs are prompted on startup. To skip the prompts, set environment variables:
 - `INPUT_DEVICE_ID` / `OUTPUT_DEVICE_ID` — integer device IDs (listed on startup)
-- `MIDI_PORT_NAME` — exact MIDI port name (or omit / enter `-1` to disable MIDI)
+- `MIDI_PORT_MATCH` — unique case-insensitive part of a MIDI input port name (omit to disable MIDI)
 
 On a machine without `smbus2` or without an I2C bus, LCD output falls back to log messages.
 
@@ -55,5 +54,5 @@ Setup before running:
 ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/issues/3
 export INPUT_DEVICE_ID=0
 export OUTPUT_DEVICE_ID=0
-export MIDI_PORT_NAME="Your MIDI Device:Your MIDI Device MIDI 1 28:0"
+export MIDI_PORT_MATCH="Your MIDI Device"
 ```
