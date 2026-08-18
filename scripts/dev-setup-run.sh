@@ -30,7 +30,7 @@ if "$github_reachable"; then
 	echo "Pulling latest Backlooper version"
 	timeout 10 git pull || echo "git pull failed, continuing with local version"
 else
-	echo "GitHub DNS unavailable after 12 attempts; continuing with local version"
+	echo "GitHub DNS unavailable after 3 attempts; continuing with local version"
 fi
 source .venv/bin/activate
 python -m pip install -e .
