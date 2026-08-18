@@ -13,7 +13,7 @@ ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/
 cd ~/backlooper_backend
 github_reachable=false
 for attempt in {1..3}; do
-	echo "Checking GitHub DNS (attempt $attempt/12)"
+	echo "Checking GitHub DNS (attempt $attempt/3)"
 	if getent hosts github.com >/dev/null; then
 		echo "GitHub DNS is available"
 		github_reachable=true
