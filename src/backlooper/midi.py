@@ -174,6 +174,10 @@ class MidiController:
     def _long_press_fired(self) -> None:
         self._long_press_timer = None
         self._held_key = None
+        if not self._all_tracks_empty():
+            logger.info('Long press ignored — tracks not empty')
+            self._screen.write_line(1, 'Clear tracks first')
+            return
         logger.info('Long press detected — entering MIDI mapping mode')
         self._screen.write_line(0, 'MAPPING MODE')
         self._screen.write_line(1, 'Hold to exit...')
@@ -200,6 +204,10 @@ class MidiController:
             logger.info('Clicktrack volume set to %d%%', volume_percent)
             self._screen.write_line(1, f'Volume: {volume_percent}%')
         elif action == ActionType.TEMPO:
+            if not self._all_tracks_empty():
+                logger.info('Tempo change ignored — tracks not empty')
+                self._screen.write_line(1, 'Clear tracks first')
+                return
             bpm = round(BPM_MIN + (value / 127.0) * (BPM_MAX - BPM_MIN))
             logger.info('Tempo set to %d BPM', bpm)
             self._screen.write_line(1, f'Tempo: {bpm} BPM')
@@ -222,6 +230,10 @@ class MidiController:
         # TRIGGERED / RECORDING / STOPPING → in progress, ignore
 
     # ── mapping mode ──────────────────────────────────────────────────────
+
+    def _all_tracks_empty(self) -> bool:
+        from backlooper.session import TrackState
+        return all(t.state == TrackState.EMPTY for t in self._session.tracks.values())
 
     def _enter_mapping(self) -> None:
         self._in_mapping = True
