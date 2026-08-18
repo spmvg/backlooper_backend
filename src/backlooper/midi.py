@@ -191,8 +191,13 @@ class MidiController:
             self._screen.write_line(1, f'Bars: {self._bars_to_record}')
         elif action == ActionType.CLICKTRACK_VOLUME:
             self._session.audio.clicktrack_volume = value / 127.0
+            volume_percent = round(value / 127.0 * 100)
+            logger.info('Clicktrack volume set to %d%%', volume_percent)
+            self._screen.write_line(1, f'Volume: {volume_percent}%')
         elif action == ActionType.TEMPO:
             bpm = round(BPM_MIN + (value / 127.0) * (BPM_MAX - BPM_MIN))
+            logger.info('Tempo set to %d BPM', bpm)
+            self._screen.write_line(1, f'Tempo: {bpm} BPM')
             asyncio.run_coroutine_threadsafe(self._session.set_bpm(bpm), self._loop)
         elif action == ActionType.RESET:
             asyncio.run_coroutine_threadsafe(self._session.reset(), self._loop)
