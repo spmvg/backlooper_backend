@@ -40,9 +40,9 @@ _SLOTS: List[Dict[str, Any]] = [
     for i in range(6)
 ] + [
     {'label': 'Reset tracks', 'action': ActionType.RESET, 'input_type': 'button'},
+    {'label': 'Click Volume',  'action': ActionType.CLICKTRACK_VOLUME, 'input_type': 'fader'},
     {'label': 'Tempo',   'action': ActionType.TEMPO,             'input_type': 'fader'},
     {'label': 'Bars to record',    'action': ActionType.BARS_TO_RECORD,    'input_type': 'fader'},
-    {'label': 'Click Volume',  'action': ActionType.CLICKTRACK_VOLUME, 'input_type': 'fader'},
 ]
 
 
