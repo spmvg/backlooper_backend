@@ -1,5 +1,6 @@
 """HD44780 16x2 LCD driver over PCF8574 I2C expander."""
 import logging
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,16 @@ class LCDScreen:
     def __init__(self, i2c_address: int = 0x27, i2c_bus: int = 1) -> None:
         self._address = i2c_address
         self._available = _SMBUS_AVAILABLE
+        self._pending_lines = [None, None]
+        self._condition = threading.Condition()
+        self._closed = False
+        self._writing = False
         if self._available:
             try:
                 self._bus = smbus2.SMBus(i2c_bus)
                 self._init()
+                self._worker = threading.Thread(target=self._write_pending_lines, daemon=True)
+                self._worker.start()
             except Exception as exc:
                 logger.warning('LCD initialisation failed (%s); output will be logged', exc)
                 self._available = False
@@ -80,14 +87,53 @@ class LCDScreen:
 
     def write_line(self, row: int, text: str) -> None:
         """Write *text* to *row* (0 or 1), truncating/padding to 16 characters."""
+        if row not in (0, 1):
+            raise ValueError('LCD row must be 0 or 1')
         padded = text[:LCD_WIDTH].ljust(LCD_WIDTH)
         logger.info('LCD row %d: %s', row, padded)
         if not self._available:
             return
+
+        with self._condition:
+            self._pending_lines[row] = padded
+            self._condition.notify()
+
+    def _write_pending_lines(self) -> None:
+        while True:
+            with self._condition:
+                while not self._closed and not any(line is not None for line in self._pending_lines):
+                    self._condition.wait()
+                if self._closed and not any(line is not None for line in self._pending_lines):
+                    return
+                pending_lines = self._pending_lines
+                self._pending_lines = [None, None]
+                self._writing = True
+
+            try:
+                for row, text in enumerate(pending_lines):
+                    if text is not None:
+                        self._write_line(row, text)
+            except Exception as exc:
+                logger.warning('LCD write failed; disabling LCD output: %s', exc)
+                self._available = False
+            finally:
+                with self._condition:
+                    self._writing = False
+                    self._condition.notify_all()
+
+    def _write_line(self, row: int, text: str) -> None:
         self._command(_CMD_DDRAM | _ROW_OFFSETS[row])
-        for char in padded:
+        for char in text:
             self._send(ord(char), _RS)
 
     def close(self) -> None:
+        if not self._available:
+            return
+        with self._condition:
+            while any(line is not None for line in self._pending_lines) or self._writing:
+                self._condition.wait()
+            self._closed = True
+            self._condition.notify()
+        self._worker.join()
         if self._available:
             self._bus.close()
