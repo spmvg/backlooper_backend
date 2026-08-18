@@ -1,7 +1,7 @@
 # TODO: make some of these settings adjustable
 BEATS_PER_BAR = 4
 DEFAULT_BPM = 120
-NUMBER_OF_TRACKS = 8
+NUMBER_OF_TRACKS = 6
 
 DEFAULT_BARS_TO_RECORD = 4
 BPM_MIN = 60

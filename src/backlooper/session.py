@@ -319,9 +319,9 @@ class Session:
         # TODO: empty memory
 
     async def send_tracks_update(self) -> None:
-        """Renders the 8-track state as a 9-character string on LCD row 0."""
+        """Renders the 6-track state as two groups of three on LCD row 0."""
         chars = [_TRACK_CHARS[self.tracks[i].state] for i in range(NUMBER_OF_TRACKS)]
-        self.screen.write_line(0, ''.join(chars[:4]) + ' ' + ''.join(chars[4:]))
+        self.screen.write_line(0, ''.join(chars[:3]) + ' ' + ''.join(chars[3:]))
 
     def _send_status(self, message: str) -> None:
         self.screen.write_line(1, message)

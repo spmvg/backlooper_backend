@@ -13,12 +13,13 @@ The screen then walks through each slot in order — press the physical button o
 
 | Slot | Type | Action |
 |------|------|--------|
-| Track 1–8 | button | toggle record → play → stop |
+| Track 1–6 | button | toggle record → play → stop |
+| Reset tracks | button | clear all tracks |
+| Bars | fader | recording length: 1, 2, 4, or 8 bars |
 | Volume | fader | click-track volume |
 | Tempo | fader | BPM (60–200) |
-| Reset | button | clear all tracks |
 
-After all 11 slots are assigned, or after 5 s of inactivity, the map is saved and reloaded on the next run.
+After all 10 slots are assigned, or after 5 s of inactivity, the map is saved and reloaded on the next run.
 
 ## Development setup
 Install the backend locally:

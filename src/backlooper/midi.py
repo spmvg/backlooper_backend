@@ -27,6 +27,7 @@ FADER_DEBOUNCE_SECONDS = 2.0
 
 class ActionType(str, Enum):
     TRACK_TOGGLE = 'track_toggle'
+    BARS_TO_RECORD = 'bars_to_record'
     CLICKTRACK_VOLUME = 'clicktrack_volume'
     TEMPO = 'tempo'
     RESET = 'reset'
@@ -36,11 +37,12 @@ class ActionType(str, Enum):
 # input_type 'button' only accepts note_on; 'fader' only accepts control_change.
 _SLOTS: List[Dict[str, Any]] = [
     {'label': f'Track {i + 1}', 'action': ActionType.TRACK_TOGGLE, 'track_id': i, 'input_type': 'button'}
-    for i in range(8)
+    for i in range(6)
 ] + [
-    {'label': 'Volume',  'action': ActionType.CLICKTRACK_VOLUME, 'input_type': 'fader'},
+    {'label': 'Reset tracks', 'action': ActionType.RESET, 'input_type': 'button'},
     {'label': 'Tempo',   'action': ActionType.TEMPO,             'input_type': 'fader'},
-    {'label': 'Reset',   'action': ActionType.RESET,             'input_type': 'button'},
+    {'label': 'Bars to record',    'action': ActionType.BARS_TO_RECORD,    'input_type': 'fader'},
+    {'label': 'Click Volume',  'action': ActionType.CLICKTRACK_VOLUME, 'input_type': 'fader'},
 ]
 
 
@@ -89,6 +91,7 @@ class MidiController:
         self._loop = loop
         self._port: Optional[mido.ports.BaseInput] = None
         self._midi_map: Dict[str, Dict] = _load_map()
+        self._bars_to_record = DEFAULT_BARS_TO_RECORD
 
         # long-press detection (normal mode)
         self._held_key: Optional[str] = None
@@ -182,6 +185,10 @@ class MidiController:
         if action == ActionType.TRACK_TOGGLE:
             track_id = entry.get('track_id')
             asyncio.run_coroutine_threadsafe(self._toggle_track(track_id), self._loop)
+        elif action == ActionType.BARS_TO_RECORD:
+            self._bars_to_record = (1, 2, 4, 8)[min(value * 4 // 128, 3)]
+            logger.info('Bars to record set to %d', self._bars_to_record)
+            self._screen.write_line(1, f'Bars: {self._bars_to_record}')
         elif action == ActionType.CLICKTRACK_VOLUME:
             self._session.audio.clicktrack_volume = value / 127.0
         elif action == ActionType.TEMPO:
@@ -197,7 +204,7 @@ class MidiController:
             return
         state = track.state
         if state == TrackState.EMPTY:
-            await self._session.request_recording(track_id, DEFAULT_BARS_TO_RECORD)
+            await self._session.request_recording(track_id, self._bars_to_record)
         elif state == TrackState.PLAYING:
             await self._session.stop_playing(track_id)
         elif state == TrackState.STOPPED:
