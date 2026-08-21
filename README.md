@@ -13,7 +13,9 @@ flowchart LR
         AI["Audio Interface\n(INST · loopback ON)"]
         Pi["Raspberry Pi"]
         LCD["LCD"]
+        MIDI["MIDI Controller"]
         Pi --- LCD
+        Pi --- MIDI
     end
 
     FX_SEND --- AI
