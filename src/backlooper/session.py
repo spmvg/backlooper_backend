@@ -14,7 +14,7 @@ from typing import Optional
 import numpy as np
 
 from backlooper.audio import AudioStream
-from backlooper.config import BEATS_PER_BAR, NUMBER_OF_TRACKS
+from backlooper.config import BEATS_PER_BAR, NUMBER_OF_TRACKS, VERSION
 from backlooper.lcd import LCDScreen
 
 _TRACK_CHARS = {
@@ -91,7 +91,7 @@ class Session:
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin
         self.audio.play()
-        self._send_status('Initialized')
+        self._send_status(f'Init [{VERSION}]')
 
     async def click(self):
         """Tracks the current beat and bar internally. Loops indefinitely."""

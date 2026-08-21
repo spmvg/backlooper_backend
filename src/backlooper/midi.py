@@ -29,6 +29,7 @@ class ActionType(str, Enum):
     TRACK_TOGGLE = 'track_toggle'
     BARS_TO_RECORD = 'bars_to_record'
     CLICKTRACK_VOLUME = 'clicktrack_volume'
+    MUTE_CLICK = 'mute_click'
     TEMPO = 'tempo'
     RESET = 'reset'
 
@@ -39,8 +40,9 @@ _SLOTS: List[Dict[str, Any]] = [
     {'label': f'Track {i + 1}', 'action': ActionType.TRACK_TOGGLE, 'track_id': i, 'input_type': 'button'}
     for i in range(6)
 ] + [
-    {'label': 'Reset tracks', 'action': ActionType.RESET, 'input_type': 'button'},
-    {'label': 'Click Volume',  'action': ActionType.CLICKTRACK_VOLUME, 'input_type': 'fader'},
+    {'label': 'Reset tracks', 'action': ActionType.RESET,            'input_type': 'button'},
+    {'label': 'Mute Click',   'action': ActionType.MUTE_CLICK,         'input_type': 'button'},
+    {'label': 'Click Volume', 'action': ActionType.CLICKTRACK_VOLUME,  'input_type': 'fader'},
     {'label': 'Tempo',   'action': ActionType.TEMPO,             'input_type': 'fader'},
     {'label': 'Bars to record',    'action': ActionType.BARS_TO_RECORD,    'input_type': 'fader'},
 ]
@@ -92,6 +94,7 @@ class MidiController:
         self._port: Optional[mido.ports.BaseInput] = None
         self._midi_map: Dict[str, Dict] = _load_map()
         self._bars_to_record = DEFAULT_BARS_TO_RECORD
+        self._clicktrack_volume_before_mute: float = 1.0
 
         # long-press detection (normal mode)
         self._held_key: Optional[str] = None
@@ -198,6 +201,15 @@ class MidiController:
             self._bars_to_record = (1, 2, 4, 8)[min(value * 4 // 128, 3)]
             logger.info('Bars to record set to %d', self._bars_to_record)
             self._screen.write_line(1, f'Bars: {self._bars_to_record}')
+        elif action == ActionType.MUTE_CLICK:
+            if self._session.audio.clicktrack_volume > 0:
+                self._clicktrack_volume_before_mute = self._session.audio.clicktrack_volume
+                self._session.audio.clicktrack_volume = 0.0
+                self._screen.write_line(1, 'Click: muted')
+            else:
+                self._session.audio.clicktrack_volume = self._clicktrack_volume_before_mute
+                volume_percent = round(self._clicktrack_volume_before_mute * 100)
+                self._screen.write_line(1, f'Click: {volume_percent}%')
         elif action == ActionType.CLICKTRACK_VOLUME:
             self._session.audio.clicktrack_volume = value / 127.0
             volume_percent = round(value / 127.0 * 100)
@@ -239,6 +251,7 @@ class MidiController:
         self._in_mapping = True
         self._slot_index = 0
         self._partial_map = {}
+        self._midi_map = {}  # start fresh; written to disk only if ≥1 slot is captured
         self._last_capture_time = 0.0
         self._fader_accept_after = 0.0
         self._fader_debounce_timer = None
@@ -324,9 +337,17 @@ class MidiController:
             self._timeout_timer.cancel()
             self._timeout_timer = None
         self._in_mapping = False
-        self._midi_map.update(self._partial_map)
-        _save_map(self._midi_map)
         count = len(self._partial_map)
+        if count == 0:
+            logger.info('Mapping exited with no slots captured — map unchanged')
+            self._screen.write_line(0, 'Mapping cancelled')
+            self._screen.write_line(1, 'No slots saved')
+            t = threading.Timer(2.0, self._restore_display)
+            t.daemon = True
+            t.start()
+            return
+        self._midi_map = self._partial_map
+        _save_map(self._midi_map)
         logger.info('Mapping done: %d slot(s) saved', count)
         self._screen.write_line(0, f'Saved {count}/{len(_SLOTS)} ctrl')
         self._screen.write_line(1, 'Mapping done')

@@ -1,3 +1,5 @@
+VERSION = '1.0.0_rc0'
+
 # TODO: make some of these settings adjustable
 BEATS_PER_BAR = 4
 DEFAULT_BPM = 120
