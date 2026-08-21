@@ -8,6 +8,7 @@ The audio interface is controlled by ``sounddevice``.
 
 import hashlib
 import logging
+import os
 import time
 from dataclasses import dataclass
 from multiprocessing import Process, Value
@@ -75,6 +76,7 @@ class AudioStream:
         self._driver_warning_printed = False
         self._clipping_skip_until = 0.0
         self._active_track_logged: set = set()  # tracks already logged on first playback
+        self._audio_process: Optional[Process] = None
 
     def _log_if_clipping_detected(self, samples: np.ndarray):
         """Prints a warning if the audio output reaches or exceeds the normalized amplitude limit."""
@@ -155,6 +157,15 @@ class AudioStream:
                         -loop_starttime_index / self.sample_rate,
                         -loop_starttime_index,
                     )
+                if loop_starttime_index > self._current_index:
+                    self._logger.error(
+                        'Track %d: loop_starttime_index=%d is AHEAD of current write index=%d '
+                        'by %d samples (%.1f s) — audio process likely restarted without '
+                        'resetting _samples_origin. All reads will return zeros.',
+                        track_id, loop_starttime_index, self._current_index,
+                        loop_starttime_index - self._current_index,
+                        (loop_starttime_index - self._current_index) / self.sample_rate,
+                    )
             looped_current_index = (
                 self._current_index - offset_in_samples - loop_starttime_index + self._latency_samples.value
             ) % (
@@ -222,12 +233,20 @@ class AudioStream:
         """
         Starts the audio stream and waits indefinitely.
         """
+        # Reset origin so this process's index-0 aligns with _samples_origin.
+        # Without this, a restarted process inherits the old origin and all loop
+        # indices are hundreds of seconds ahead of the write pointer.
+        self._samples_origin.value = _DEFAULT_ORIGIN_VALUE
+
         duration = 1  # seconds. Increasing this value causes delay on exit.
         self._logger = logging.getLogger(__name__)
         self._logger.setLevel(self.log_level)
+        self._logger.propagate = False  # subprocess inherits parent handlers; avoid duplicate lines
+        self._logger.handlers.clear()
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)
+        self._logger.info('Audio process started (PID %d)', os.getpid())
 
         with Stream(
                 samplerate=self.sample_rate,
@@ -360,7 +379,11 @@ class AudioStream:
             self,
     ):
         """Starts the audio stream in a separate process."""
-        Process(target=self.run).start()
+        if self._audio_process is not None and self._audio_process.is_alive():
+            logger.warning('play() called but audio process PID %d is still alive', self._audio_process.pid)
+        self._audio_process = Process(target=self.run)
+        self._audio_process.start()
+        logger.info('Audio process spawned (PID %d)', self._audio_process.pid)
 
     def read(
             self,
