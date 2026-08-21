@@ -351,7 +351,7 @@ class Session:
     async def send_tracks_update(self) -> None:
         """Renders the 6-track state as two groups of three on LCD row 0."""
         chars = [_TRACK_CHARS[self.tracks[i].state] for i in range(NUMBER_OF_TRACKS)]
-        self.screen.write_line(0, ''.join(chars[:3]) + ' ' + ''.join(chars[3:]))
+        self.screen.write_line(0, ' '.join(''.join(chars[i:i+2]) for i in range(0, len(chars), 2)))
 
     def _send_status(self, message: str) -> None:
         self.screen.write_line(1, message)
