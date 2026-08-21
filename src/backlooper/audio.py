@@ -9,7 +9,6 @@ The audio interface is controlled by ``sounddevice``.
 import hashlib
 import logging
 import time
-import webbrowser
 from dataclasses import dataclass
 from multiprocessing import Process, Value
 from multiprocessing.shared_memory import ShareableList
@@ -242,9 +241,6 @@ class AudioStream:
             self._logger.info(f'Using output device {output_device_id}: {output_device}')
             self._logger.debug(f'Output latency as declared by device: {self._output_latency_from_device_seconds:.3f} s')
             self.latency_seconds = self._input_latency_from_device_seconds + self._output_latency_from_device_seconds
-
-            # session is running, so now we can open the browser
-            webbrowser.open("https://www.backlooper.app/")
 
             while True:
                 sleep(int(duration * 1000))
