@@ -77,20 +77,20 @@ class AudioStream:
         self._output_latency_from_device_seconds = None
         self._driver_warning_printed = False
         self._clipping_skip_until = 0.0
-        self._last_callback_wall_time = 0.0  # wall-clock time of the previous callback; 0 = first
+        self._last_callback_wall_time = 0.0  # monotonic time of the previous callback; 0 = first
         self._active_track_logged: set = set()  # tracks already logged on first playback
         self._desync_counter = Value(_SHARED_INT_TYPE, 0)
         self._audio_process: Optional[Process] = None
 
     def _log_if_clipping_detected(self, samples: np.ndarray):
         """Prints a warning if the audio output reaches or exceeds the normalized amplitude limit."""
-        if samples.size == 0 or self._logger is None or time.time() < self._clipping_skip_until:
+        if samples.size == 0 or self._logger is None or time.monotonic() < self._clipping_skip_until:
             return
 
         peak = float(np.max(np.abs(samples)))
         if peak >= 1.0 - 1e-6:
             print(f'Audio clipping detected. Peak: {peak:.4f}')
-            self._clipping_skip_until = time.time() + 10
+            self._clipping_skip_until = time.monotonic() + 10
 
     def callback(self, indata, outdata, frames, callback_time, status):
         """
@@ -103,11 +103,13 @@ class AudioStream:
         - And mixing in the clicktrack into ``outdata``.
         """
         if self._samples_origin.value != self._samples_origin.value:
-            self._samples_origin.value = time.time()
+            self._samples_origin.value = time.monotonic()
 
-        now_wall = time.time()
+        # Use monotonic clock for gap detection: immune to NTP steps that would
+        # cause time.time() to jump and falsely trigger a desync.
+        now_monotonic = time.monotonic()
         if self._last_callback_wall_time > 0:
-            gap = now_wall - self._last_callback_wall_time
+            gap = now_monotonic - self._last_callback_wall_time
             if gap > self._time_between_blocks * 10:
                 self._logger.warning(
                     'Callback gap: %.3f s (expected %.3f s) — '
@@ -130,7 +132,7 @@ class AudioStream:
                     self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK * track_id + 2] = 0
                 self._active_track_logged.clear()
                 self._desync_counter.value += 1
-        self._last_callback_wall_time = now_wall
+        self._last_callback_wall_time = now_monotonic
 
         output_time = callback_time.outputBufferDacTime
         input_time = callback_time.inputBufferAdcTime
@@ -150,7 +152,7 @@ class AudioStream:
             self.latency_seconds = output_time-input_time
             self.using_automatic_latency_correction.value = 1
 
-        start_of_callback = time.time()
+        start_of_callback = time.monotonic()
 
         self._storage.write(
             self._current_index,
@@ -255,9 +257,9 @@ class AudioStream:
         self._write_index.value = self._current_index
         self._previous_dac_time = callback_time.outputBufferDacTime
 
-        if (time.time() - start_of_callback) / self._time_between_blocks > 0.5:
+        if (time.monotonic() - start_of_callback) / self._time_between_blocks > 0.5:
             self._logger.warning(
-                f'The callback function took relatively long to run: actual {time.time() - start_of_callback} '
+                f'The callback function took relatively long to run: actual {time.monotonic() - start_of_callback} '
                 f'is close to the limit {self._time_between_blocks}. This can result in audio glitches.'
             )
 
@@ -337,7 +339,7 @@ class AudioStream:
         if origin == origin:  # not NaN
             start_idx = round((start_time_value - origin) * self.sample_rate)
             end_idx = round((end_time_value - origin) * self.sample_rate)
-            expected_write_idx = round((time.time() - origin) * self.sample_rate)
+            expected_write_idx = round((time.monotonic() - origin) * self.sample_rate)
             logger.info(
                 'Set loop track %d: start_idx=%d end_idx=%d length=%d offset_samples=%d '
                 '(expected write_idx≈%d)',

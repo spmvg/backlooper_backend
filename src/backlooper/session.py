@@ -83,7 +83,7 @@ class Session:
     def run(self):
         """Main starting point of a session."""
         logger.debug('Start running')
-        self.origin = time.time()
+        self.origin = time.monotonic()
 
         loop = asyncio.get_event_loop()
         loop.create_task(self.click())
@@ -113,7 +113,7 @@ class Session:
     async def click(self):
         """Tracks the current beat and bar internally. Loops indefinitely."""
         while True:
-            now = time.time()
+            now = time.monotonic()
             absolute_beat_number = round(self._absolute_beat_number(now))
             self.current_beat = (absolute_beat_number % BEATS_PER_BAR) + 1  # one-indexed
             self.current_bar = math.floor(absolute_beat_number / BEATS_PER_BAR)
@@ -134,7 +134,7 @@ class Session:
     async def set_bpm(self, bpm: int):
         """Updates the tempo."""
         self.bpm = bpm
-        self.origin = (time.time() + 0.5 * self._get_seconds_per_beat())  # prevent scratch noise when sliding BPM
+        self.origin = (time.monotonic() + 0.5 * self._get_seconds_per_beat())  # prevent scratch noise when sliding BPM
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin
 
@@ -155,7 +155,7 @@ class Session:
             logger.warning('Cannot request recording for already recording track: %s', track_id)
             return
 
-        now = time.time()
+        now = time.monotonic()
         absolute_beat_number = self._absolute_beat_number(now)
         unit_progression_in_bar = (absolute_beat_number % BEATS_PER_BAR) / BEATS_PER_BAR
         current_bar = math.floor(absolute_beat_number / BEATS_PER_BAR)
@@ -194,7 +194,7 @@ class Session:
         self._send_status('Recording')
         await self.send_tracks_update()
 
-        time_to_wait = bar_end_time - time.time()
+        time_to_wait = bar_end_time - time.monotonic()
         if time_to_wait > 0:
             logger.debug('Waiting for recording to finish')
             await asyncio.sleep(time_to_wait)
@@ -283,7 +283,7 @@ class Session:
         )
         logger.debug('Playing starts at %s for track ID %s', bar_start_time, track_id)
 
-        time_to_wait = bar_start_time - time.time()
+        time_to_wait = bar_start_time - time.monotonic()
         if time_to_wait > 0:
             await asyncio.sleep(time_to_wait)
 
@@ -326,7 +326,7 @@ class Session:
         )
         logger.debug('Track ID %s stops at %s', track_id, bar_start_time)
 
-        time_to_wait = bar_start_time - time.time()
+        time_to_wait = bar_start_time - time.monotonic()
         if time_to_wait > 0:
             await asyncio.sleep(time_to_wait)
 
