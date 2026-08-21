@@ -82,16 +82,6 @@ class AudioStream:
         self._desync_counter = Value(_SHARED_INT_TYPE, 0)
         self._audio_process: Optional[Process] = None
 
-    def _log_if_clipping_detected(self, samples: np.ndarray):
-        """Prints a warning if the audio output reaches or exceeds the normalized amplitude limit."""
-        if samples.size == 0 or self._logger is None or time.monotonic() < self._clipping_skip_until:
-            return
-
-        peak = float(np.max(np.abs(samples)))
-        if peak >= 1.0 - 1e-6:
-            print(f'Audio clipping detected. Peak: {peak:.4f}')
-            self._clipping_skip_until = time.monotonic() + 10
-
     def callback(self, indata, outdata, frames, callback_time, status):
         """
         The ``callback`` function is the real-time audio processing function, running in a separate process.
@@ -250,8 +240,6 @@ class AudioStream:
             outdata[-end_index_in_clicktrack:] += self._clicktrack_volume.value * click[
                 :end_index_in_clicktrack
             ]
-
-        self._log_if_clipping_detected(outdata)
 
         self._current_index += desired_samples
         self._write_index.value = self._current_index
