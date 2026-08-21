@@ -1,4 +1,4 @@
-VERSION = '1.0.0_rc4'
+VERSION = '1.0.0_rc5'
 
 # TODO: make some of these settings adjustable
 BEATS_PER_BAR = 4
