@@ -1,5 +1,7 @@
 # Backlooper
 
+A looper pedal that removes the need to think about when to start recording. Audio is captured continuously; press a button near the first beat of a bar and Backlooper loops the last N bars as if you had pressed it at the exact start.
+
 ```mermaid
 flowchart LR
     Guitar --- AmpIN
@@ -23,60 +25,52 @@ flowchart LR
     AI --- FX_RETURN
 ```
 
-Backlooper loops audio without having to trigger beforehand.
-Audio is always being recorded.
-The last few bars will be played back if you select a track at approximately the first beat of the next bar.
-
-Status is shown on a 16×2 LCD screen connected via I2C (HD44780 + PCF8574 backpack).
-Controls are provided by any class-compliant USB MIDI device (buttons + faders).
+The 16×2 LCD (HD44780 + PCF8574 I2C backpack) shows track states and status messages. Any USB MIDI device provides the controls.
 
 ## MIDI mapping
-Hold any MIDI button for 5 seconds to enter mapping mode.
-The screen then walks through each slot in order — press the physical button or move the fader you want to assign:
+
+Hold any MIDI button for **5 seconds** to enter mapping mode. Press the physical control you want to assign:
 
 | Slot | Type | Action |
 |------|------|--------|
-| Track 1–6 | button | toggle record → play → stop |
+| Track 1–6 | button | press once: record last N bars and loop; again: stop at next bar; again: resume |
 | Reset tracks | button | clear all tracks |
-| Mute click | button | toggle click track |
-| Bars | fader | recording length: 1, 2, 4, or 8 bars |
-| Volume | fader | click-track volume |
-| Tempo | fader | BPM (60–200) |
+| Mute click | button | toggle click track on/off |
+| Click volume | fader | click-track volume |
+| Tempo | fader | BPM (60–200), only when all tracks are empty |
+| Bars to record | fader | recording length: 1, 2, 4, or 8 bars |
 
-After all 10 slots are assigned, or after 5 s of inactivity, the map is saved and reloaded on the next run.
+After all slots are assigned, or after 5 s of inactivity, the map is saved and reloaded on the next run.
 
-## Development setup
-Install the backend locally:
+## Setup
 
-```commandline
-python -m pip install -e .
+Enable I2C in `raspi-config` and wire the LCD backpack (SDA/SCL + 5 V + GND).
+
+Clone the repository, then register and start the systemd service:
+
+```bash
+bash ~/backlooper_backend/scripts/install-run-on-startup.sh
 ```
 
-Run the backend:
+The service runs `scripts/dev-setup-run.sh` on every boot: pulls the latest version, installs dependencies, and starts Backlooper. Logs:
 
-```commandline
+```bash
+journalctl -u backlooper -f
+```
+
+## Development
+
+```bash
+python -m pip install -e .
 python -m backlooper
 ```
 
-The input and output sound device IDs are prompted on startup. To skip the prompts, set environment variables:
+Device IDs are prompted on startup. Override with environment variables:
 - `INPUT_DEVICE_ID` / `OUTPUT_DEVICE_ID` — integer device IDs (listed on startup)
-- `MIDI_PORT_MATCH` — unique case-insensitive part of a MIDI input port name (omit to disable MIDI)
+- `MIDI_PORT_MATCH` — unique case-insensitive substring of a MIDI input port name
 
-On a machine without `smbus2` or without an I2C bus, LCD output falls back to log messages.
+On a machine without `smbus2` or an I2C bus, LCD output falls back to log messages.
 
-Generate developer documentation locally:
+---
 
-```commandline
-sphinx-build -M html docs build
-```
-
-### Running on a Raspberry Pi
-Enable I2C in `raspi-config` and wire the LCD backpack to the I2C bus (SDA/SCL + 5 V + GND).
-
-Setup before running:
-```bash
-ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/issues/3
-export INPUT_DEVICE_ID=0
-export OUTPUT_DEVICE_ID=0
-export MIDI_PORT_MATCH="Your MIDI Device"
-```
+> **Note — legacy versions:** releases `0.x.y` ran on a laptop with a web frontend (WebSocket + browser UI). That approach required dragging a laptop to every session and has been deprecated in favour of the self-contained Raspberry Pi unit described above.
