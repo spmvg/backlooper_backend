@@ -55,7 +55,7 @@ bash ~/backlooper_backend/scripts/install-run-on-startup.sh
 The service runs `scripts/dev-setup-run.sh` on every boot: pulls the latest version, installs dependencies, and starts Backlooper. Logs:
 
 ```bash
-journalctl -u backlooper -f
+journalctl --user -u backlooper -f
 ```
 
 ## Development
