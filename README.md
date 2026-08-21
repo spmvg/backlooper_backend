@@ -9,8 +9,16 @@ flowchart LR
         FX_RETURN["FX RETURN"]
     end
 
-    FX_SEND --- BL["Backlooper\n(audio interface: INST · loopback ON)"]
-    BL --- FX_RETURN
+    subgraph Backlooper["Backlooper"]
+        AI["Audio Interface\n(INST · loopback ON)"]
+        Pi["Raspberry Pi"]
+        LCD["LCD"]
+        Pi --- LCD
+    end
+
+    FX_SEND --- AI
+    AI --- Pi
+    AI --- FX_RETURN
 ```
 
 Backlooper loops audio without having to trigger beforehand.
