@@ -93,7 +93,7 @@ class Session:
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin
         self.audio.play()
-        self._send_status(f'Init [{VERSION}]')
+        self._send_status(f'Version {VERSION}')
 
     async def _watch_desync(self):
         """Resets track state whenever the audio process signals a desync."""
