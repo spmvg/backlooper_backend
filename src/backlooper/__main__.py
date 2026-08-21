@@ -1,31 +1,36 @@
 """
-This is the main entrypoint for the backlooper.app backend.
+This is the main entrypoint for the backlooper backend.
 It is started by running: ``python -m backlooper``.
-
-``__main__`` starts a websockets endpoint on the local machine for the frontend to connect to.
-The frontend and backend communicate by sending JSON messages back and forth.
-The implementation is based on ``asyncio``.
-More documentation is provided in the underlying modules, such as ``audio`` and ``session``.
 """
 import argparse
 import asyncio
-import json
 import logging
 import multiprocessing
-from json import JSONDecodeError
+import os
+from typing import List, Optional
 
 from sounddevice import query_devices
-import websockets
+
+import mido
 
 from backlooper.audio import AudioStream
-from backlooper.config import EVENT_TYPE_KEY, INITIALIZE_EVENT, ERROR_EVENT, \
-    MESSAGE_KEY, SET_BPM_EVENT, \
-    BPM_EVENT, BPM_KEY, STOP_EVENT, CALIBRATE_EVENT, LOGS_FORMAT, VOLUME_KEY, \
-    CLICKTRACK_VOLUME_EVENT, LATENCY_EVENT, LATENCY_KEY, START_EVENT, \
-    BACKLOOP_EVENT, RESET_EVENT, TRACK_KEY, \
-    BARS_TO_RECORD_KEY, DEFAULT_BPM, MAJOR_VERSION_EVENT, MAJOR_VERSION, \
-    USING_AUTOMATIC_LATENCY_CORRECTION_KEY
+from backlooper.config import DEFAULT_BPM, LOGS_FORMAT
+from backlooper.lcd import LCDScreen
+from backlooper.midi import MidiController
 from backlooper.session import Session
+
+
+def resolve_midi_port(port_match: str, ports: List[str]) -> Optional[str]:
+    """Return the single input port whose name contains the configured match."""
+    matches = [port for port in ports if port_match.casefold() in port.casefold()]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        logger.warning('No MIDI input port matches MIDI_PORT_MATCH=%r; MIDI disabled', port_match)
+    else:
+        logger.warning('MIDI_PORT_MATCH=%r is ambiguous: %s; MIDI disabled', port_match, matches)
+    return None
+
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
@@ -36,7 +41,7 @@ if __name__ == "__main__":
     if args.debug:
         log_level = logging.DEBUG
 
-    logger = logging.getLogger('backlooper')  # logger of backlooper calls itself backlooper
+    logger = logging.getLogger('backlooper')
     logger.setLevel(log_level)
     screen_handler = logging.StreamHandler()
     screen_handler.setFormatter(logging.Formatter(LOGS_FORMAT))
@@ -44,17 +49,27 @@ if __name__ == "__main__":
 
     logger.info('Available sound devices:\n\n%s\n', query_devices())
 
-    # Prompt user for input and output device IDs
-    try:
-        input_device_id = int(input('Enter the input device ID (integer): '))
-    except ValueError:
-        logger.error('Invalid input device ID. Please enter an integer.')
-        exit(1)
-    try:
-        output_device_id = int(input('Enter the output device ID (integer): '))
-    except ValueError:
-        logger.error('Invalid output device ID. Please enter an integer.')
-        exit(1)
+    _input_device_id_env = os.environ.get('INPUT_DEVICE_ID')
+    if _input_device_id_env is not None:
+        logger.info('Taking input device ID from INPUT_DEVICE_ID env var: %s', _input_device_id_env)
+        input_device_id = int(_input_device_id_env)
+    else:
+        try:
+            input_device_id = int(input('Enter the input device ID (integer): '))
+        except ValueError:
+            logger.error('Invalid input device ID. Please enter an integer.')
+            exit(1)
+
+    _output_device_id_env = os.environ.get('OUTPUT_DEVICE_ID')
+    if _output_device_id_env is not None:
+        logger.info('Taking output device ID from OUTPUT_DEVICE_ID env var: %s', _output_device_id_env)
+        output_device_id = int(_output_device_id_env)
+    else:
+        try:
+            output_device_id = int(input('Enter the output device ID (integer): '))
+        except ValueError:
+            logger.error('Invalid output device ID. Please enter an integer.')
+            exit(1)
 
     audio = AudioStream(
         log_level=log_level,
@@ -62,101 +77,39 @@ if __name__ == "__main__":
         output_device_id=output_device_id,
     )
 
+    _midi_port_match = os.environ.get('MIDI_PORT_MATCH')
+    midi_port_name = None
+    _midi_ports = mido.get_input_names()
+    if not _midi_ports:
+        logger.warning('No MIDI input ports found; MIDI disabled')
+    else:
+        logger.info('Available MIDI input ports:\n%s', '\n'.join(f'  {name}' for name in _midi_ports))
+        if _midi_port_match:
+            midi_port_name = resolve_midi_port(_midi_port_match, _midi_ports)
+            if midi_port_name:
+                logger.info('Using MIDI input port: %s', midi_port_name)
+        else:
+            logger.info('MIDI_PORT_MATCH not set; MIDI disabled')
+
+    screen = LCDScreen()
     session = Session(
         bpm=DEFAULT_BPM,
         audio=audio,
+        screen=screen,
     )
 
-    async def handle_initialize(websocket, event):
-        session.register_websocket(websocket)
-        await websocket.send(json.dumps({
-            EVENT_TYPE_KEY: BPM_EVENT,
-            BPM_KEY: session.bpm
-        }))
-        await websocket.send(json.dumps({
-            EVENT_TYPE_KEY: CLICKTRACK_VOLUME_EVENT,
-            VOLUME_KEY: session.audio.clicktrack_volume
-        }))
-        await session.send_latency_update()
-        await session.send_tracks_update()
-        await websocket.send(json.dumps({
-            EVENT_TYPE_KEY: MAJOR_VERSION_EVENT,
-            MESSAGE_KEY: MAJOR_VERSION,
-            USING_AUTOMATIC_LATENCY_CORRECTION_KEY: bool(audio.using_automatic_latency_correction.value),
-        }))
-        logger.debug('GUI connected')
-
-    async def handle_set_bpm(websocket, event):
-        loop = asyncio.get_event_loop()
-        loop.create_task(session.set_bpm(event[BPM_KEY]))
-        logger.debug('Set BPM to %s', event[BPM_KEY])
-
-    async def handle_backloop(websocket, event):
-        loop = asyncio.get_event_loop()
-        loop.create_task(session.request_recording(
-            track_id=event[TRACK_KEY],
-            bars_to_record=event[BARS_TO_RECORD_KEY],
-        ))
-
-    async def handle_start(websocket, event):
-        loop = asyncio.get_event_loop()
-        loop.create_task(session.start_playing(event[TRACK_KEY]))
-
-    async def handle_stop(websocket, event):
-        loop = asyncio.get_event_loop()
-        loop.create_task(session.stop_playing(event[TRACK_KEY]))
-
-    async def handle_calibrate(websocket, event):
-        loop = asyncio.get_event_loop()
-        loop.create_task(session.calibrate())
-
-    async def handle_reset(websocket, event):
-        loop = asyncio.get_event_loop()
-        loop.create_task(session.reset())
-
-    async def handle_unknown(websocket, event):
-        await websocket.send(json.dumps({
-            EVENT_TYPE_KEY: ERROR_EVENT,
-            MESSAGE_KEY: 'Unknown event type'
-        }))
-        logger.warning('Unknown event type in event: %s', event)
-
-    async def handle_clicktrack_volume(websocket, event):
-        session.audio.clicktrack_volume = max(min(event[VOLUME_KEY], 1), 0)
-
-    async def handle_latency(websocket, event):
-        session.audio.latency_seconds = event[LATENCY_KEY]
-
-    message_handler = {
-        INITIALIZE_EVENT: handle_initialize,
-        SET_BPM_EVENT: handle_set_bpm,
-        BACKLOOP_EVENT: handle_backloop,
-        START_EVENT: handle_start,
-        STOP_EVENT: handle_stop,
-        CALIBRATE_EVENT: handle_calibrate,
-        CLICKTRACK_VOLUME_EVENT: handle_clicktrack_volume,
-        LATENCY_EVENT: handle_latency,
-        RESET_EVENT: handle_reset,
-    }
-
-    async def handler(websocket):
-        async for message in websocket:
-            try:
-                message_dict = json.loads(message)
-            except JSONDecodeError:
-                await websocket.send(json.dumps({
-                    EVENT_TYPE_KEY: ERROR_EVENT,
-                    MESSAGE_KEY: 'Cannot decode JSON'
-                }))
-                logger.warning('Cannot decode JSON in event: %s', message)
-                continue
-
-            await message_handler.get(message_dict[EVENT_TYPE_KEY], handle_unknown)(websocket, message_dict)
-
-    # TODO: HTTPS (wss)
     async def main():
+        loop = asyncio.get_running_loop()
+        midi_ctrl = MidiController(session=session, screen=screen, loop=loop)
+        if midi_port_name:
+            midi_ctrl.open(midi_port_name)
         session.run()
-        async with websockets.serve(handler, "", 8001):
+        try:
             await asyncio.Future()  # run forever
+        finally:
+            midi_ctrl.close()
+            screen.write_line(0, '')
+            screen.write_line(1, 'Backlooper off')
+            screen.close()
 
     asyncio.run(main())

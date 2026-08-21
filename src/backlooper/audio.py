@@ -8,8 +8,8 @@ The audio interface is controlled by ``sounddevice``.
 
 import hashlib
 import logging
+import os
 import time
-import webbrowser
 from dataclasses import dataclass
 from multiprocessing import Process, Value
 from multiprocessing.shared_memory import ShareableList
@@ -30,6 +30,7 @@ _SHARED_FLOAT_TYPE = 'd'
 _SHARED_INT_TYPE = 'i'
 _LOOPER_FIELDS_PER_TRACK = 3
 _IDENTIFIER_LENGTH = 7  # since KeyOffset name can be max. 14 on macOS, use 7 for the identifier
+_DESYNC_GAP_THRESHOLD_SECONDS = 2.0
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class AudioStream:
         self._storage = StripedStorage(identifier=self._storage_identifier)
         self._time_between_blocks = self.block_size / self.sample_rate
         self._current_index = 0  # time when _samples_origin is initialized, has _current_index 0
+        self._write_index = Value('l', 0)  # mirrors _current_index but shared with main process
         self._samples_origin = Value(_SHARED_FLOAT_TYPE, _DEFAULT_ORIGIN_VALUE)
         self._previous_dac_time = None
         self._loop_start_end_times = ShareableList([_DEFAULT_LOOPER_VALUE, _DEFAULT_LOOPER_VALUE, 0] * NUMBER_OF_TRACKS)
@@ -74,6 +76,11 @@ class AudioStream:
         self._input_latency_from_device_seconds = None
         self._output_latency_from_device_seconds = None
         self._driver_warning_printed = False
+        self._clipping_skip_until = 0.0
+        self._last_callback_wall_time = 0.0  # monotonic time of the previous callback; 0 = first
+        self._active_track_logged: set = set()  # tracks already logged on first playback
+        self._desync_counter = Value(_SHARED_INT_TYPE, 0)
+        self._audio_process: Optional[Process] = None
 
     def callback(self, indata, outdata, frames, callback_time, status):
         """
@@ -86,7 +93,36 @@ class AudioStream:
         - And mixing in the clicktrack into ``outdata``.
         """
         if self._samples_origin.value != self._samples_origin.value:
-            self._samples_origin.value = time.time()
+            self._samples_origin.value = time.monotonic()
+
+        # Use monotonic clock for gap detection: immune to NTP steps that would
+        # cause time.time() to jump and falsely trigger a desync.
+        now_monotonic = time.monotonic()
+        if self._last_callback_wall_time > 0:
+            gap = now_monotonic - self._last_callback_wall_time
+            if gap > self._time_between_blocks * 10:
+                self._logger.warning(
+                    'Callback gap: %.3f s (expected %.3f s) — '
+                    'audio device stalled; ~%d samples unrecorded.',
+                    gap, self._time_between_blocks,
+                    round(gap * self.sample_rate),
+                )
+            if gap >= _DESYNC_GAP_THRESHOLD_SECONDS:
+                self._logger.error(
+                    'ERROR: desync — %.1f s gap; shifting origins and clearing all loops.',
+                    gap,
+                )
+                # Shift both origins forward so _current_index stays consistent with wall time.
+                self._samples_origin.value += gap
+                if self._clicktrack_origin.value == self._clicktrack_origin.value:  # not NaN
+                    self._clicktrack_origin.value += gap
+                for track_id in range(NUMBER_OF_TRACKS):
+                    self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK * track_id] = _DEFAULT_LOOPER_VALUE
+                    self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK * track_id + 1] = _DEFAULT_LOOPER_VALUE
+                    self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK * track_id + 2] = 0
+                self._active_track_logged.clear()
+                self._desync_counter.value += 1
+        self._last_callback_wall_time = now_monotonic
 
         output_time = callback_time.outputBufferDacTime
         input_time = callback_time.inputBufferAdcTime
@@ -106,7 +142,7 @@ class AudioStream:
             self.latency_seconds = output_time-input_time
             self.using_automatic_latency_correction.value = 1
 
-        start_of_callback = time.time()
+        start_of_callback = time.monotonic()
 
         self._storage.write(
             self._current_index,
@@ -125,6 +161,34 @@ class AudioStream:
             loop_starttime_index = round((loop_starttime - self._samples_origin.value) * self.sample_rate)
             loop_endtime_index = round((loop_endtime - self._samples_origin.value) * self.sample_rate)
             offset_in_samples = round(offset * self.sample_rate)
+
+            if track_id not in self._active_track_logged:
+                self._active_track_logged.add(track_id)
+                self._logger.info(
+                    'Track %d playback started: start_index=%d end_index=%d '
+                    'loop_length=%d current_index=%d samples_origin=%.3f',
+                    track_id, loop_starttime_index, loop_endtime_index,
+                    loop_endtime_index - loop_starttime_index,
+                    self._current_index, self._samples_origin.value,
+                )
+                if loop_starttime_index < 0:
+                    self._logger.warning(
+                        'Track %d: loop_starttime_index=%d is negative — '
+                        'loop start precedes audio origin by %.3f s. '
+                        'First %d samples will be silence.',
+                        track_id, loop_starttime_index,
+                        -loop_starttime_index / self.sample_rate,
+                        -loop_starttime_index,
+                    )
+                if loop_starttime_index > self._current_index:
+                    self._logger.error(
+                        'Track %d: loop_starttime_index=%d is AHEAD of current write index=%d '
+                        'by %d samples (%.1f s) — audio process likely restarted without '
+                        'resetting _samples_origin. All reads will return zeros.',
+                        track_id, loop_starttime_index, self._current_index,
+                        loop_starttime_index - self._current_index,
+                        (loop_starttime_index - self._current_index) / self.sample_rate,
+                    )
             looped_current_index = (
                 self._current_index - offset_in_samples - loop_starttime_index + self._latency_samples.value
             ) % (
@@ -178,11 +242,12 @@ class AudioStream:
             ]
 
         self._current_index += desired_samples
+        self._write_index.value = self._current_index
         self._previous_dac_time = callback_time.outputBufferDacTime
 
-        if (time.time() - start_of_callback) / self._time_between_blocks > 0.5:
+        if (time.monotonic() - start_of_callback) / self._time_between_blocks > 0.5:
             self._logger.warning(
-                f'The callback function took relatively long to run: actual {time.time() - start_of_callback} '
+                f'The callback function took relatively long to run: actual {time.monotonic() - start_of_callback} '
                 f'is close to the limit {self._time_between_blocks}. This can result in audio glitches.'
             )
 
@@ -190,12 +255,20 @@ class AudioStream:
         """
         Starts the audio stream and waits indefinitely.
         """
+        # Reset origin so this process's index-0 aligns with _samples_origin.
+        # Without this, a restarted process inherits the old origin and all loop
+        # indices are hundreds of seconds ahead of the write pointer.
+        self._samples_origin.value = _DEFAULT_ORIGIN_VALUE
+
         duration = 1  # seconds. Increasing this value causes delay on exit.
         self._logger = logging.getLogger(__name__)
         self._logger.setLevel(self.log_level)
+        self._logger.propagate = False  # subprocess inherits parent handlers; avoid duplicate lines
+        self._logger.handlers.clear()
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(LOGS_FORMAT))
         self._logger.addHandler(handler)
+        self._logger.info('Audio process started (PID %d)', os.getpid())
 
         with Stream(
                 samplerate=self.sample_rate,
@@ -230,9 +303,6 @@ class AudioStream:
             self._logger.debug(f'Output latency as declared by device: {self._output_latency_from_device_seconds:.3f} s')
             self.latency_seconds = self._input_latency_from_device_seconds + self._output_latency_from_device_seconds
 
-            # session is running, so now we can open the browser
-            webbrowser.open("https://www.backlooper.app/")
-
             while True:
                 sleep(int(duration * 1000))
 
@@ -253,7 +323,31 @@ class AudioStream:
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id] = start_time_value
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+1] = end_time_value
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+2] = offset
-        logger.debug('Set loop start and end for track %s', track_id)
+        origin = self._samples_origin.value
+        if origin == origin:  # not NaN
+            start_idx = round((start_time_value - origin) * self.sample_rate)
+            end_idx = round((end_time_value - origin) * self.sample_rate)
+            expected_write_idx = round((time.monotonic() - origin) * self.sample_rate)
+            logger.info(
+                'Set loop track %d: start_idx=%d end_idx=%d length=%d offset_samples=%d '
+                '(expected write_idx≈%d)',
+                track_id, start_idx, end_idx, end_idx - start_idx,
+                round(offset * self.sample_rate), expected_write_idx,
+            )
+            if start_idx > expected_write_idx:
+                logger.warning(
+                    'Track %d: loop start (%d) is %.1f s ahead of expected write index (%d) — '
+                    'audio device may have stalled; loop will play silence.',
+                    track_id, start_idx,
+                    (start_idx - expected_write_idx) / self.sample_rate,
+                    expected_write_idx,
+                )
+        else:
+            logger.info(
+                'Set loop track %d: start=%.3f end=%.3f (audio origin not yet set)',
+                track_id, start_time_value, end_time_value,
+            )
+        self._active_track_logged.discard(track_id)
 
     def reset_loop(
             self,
@@ -263,14 +357,23 @@ class AudioStream:
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id] = _DEFAULT_LOOPER_VALUE
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+1] = _DEFAULT_LOOPER_VALUE
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+2] = 0
-        logger.debug('Reset loop for track %s', track_id)
+        self._active_track_logged.discard(track_id)
+        logger.info('Reset loop for track %s', track_id)
 
     @property
     def origin(self):
-        """
-        Wrapper around the ``multiprocessing.Value`` object containing the first execution time of the callback
-        function."""
+        """Wall-clock time of the first callback (i.e. index 0 in the storage)."""
         return self._samples_origin.value
+
+    @property
+    def write_index(self) -> int:
+        """Highest sample index written by the audio subprocess; readable from any process."""
+        return self._write_index.value
+
+    @property
+    def desync_counter(self) -> int:
+        """Incremented by the audio subprocess each time a desync is detected and healed."""
+        return self._desync_counter.value
 
     @property
     def clicktrack_origin(self):
@@ -316,8 +419,11 @@ class AudioStream:
             self,
     ):
         """Starts the audio stream in a separate process."""
-        _audio_process = Process(target=self.run)
-        _audio_process.start()
+        if self._audio_process is not None and self._audio_process.is_alive():
+            logger.warning('play() called but audio process PID %d is still alive', self._audio_process.pid)
+        self._audio_process = Process(target=self.run)
+        self._audio_process.start()
+        logger.info('Audio process spawned (PID %d)', self._audio_process.pid)
 
     def read(
             self,
