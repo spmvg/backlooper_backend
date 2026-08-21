@@ -3,11 +3,11 @@ Description=Backlooper
 After=sound.target network.target
 
 [Service]
-ExecStart=/bin/bash %h/backlooper_backend/scripts/dev-setup-run.sh
+ExecStart=/bin/bash ${BACKLOOPER_SCRIPT}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

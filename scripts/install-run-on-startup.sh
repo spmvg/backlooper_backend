@@ -1,9 +1,11 @@
 #!/bin/bash
-# Run once to register the systemd user service. Re-run after changing backlooper.service.
+# Run once to register the systemd system service. Re-run after changing backlooper.service.
 set -e
 
-mkdir -p ~/.config/systemd/user
-cp ~/backlooper_backend/scripts/backlooper.service ~/.config/systemd/user/backlooper.service
-systemctl --user daemon-reload
-systemctl --user enable --now backlooper.service
-echo "Service installed and started. Logs: journalctl --user -u backlooper -f"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+export BACKLOOPER_SCRIPT="${SCRIPT_DIR}/dev-setup-run.sh"
+
+envsubst < "${SCRIPT_DIR}/backlooper.service" | sudo tee /etc/systemd/system/backlooper.service > /dev/null
+sudo systemctl daemon-reload
+sudo systemctl enable --now backlooper.service
+echo "Service installed and started. Logs: journalctl -u backlooper -f"

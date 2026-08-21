@@ -1,8 +1,10 @@
 # This script assumes that:
-#   - The location of the repository is `~/backlooper_backend`
-#   - The virtual environment is located at `~/backlooper_backend/.venv`
+#   - The repository contains this script under scripts/
+#   - The virtual environment is located at <repo>/\.venv
 #   - The input and output devices are both at index 0
 #   - I2C is enabled, LCD contrast dialed properly
+
+REPO_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.."; pwd)"
 
 export INPUT_DEVICE_ID=0
 export OUTPUT_DEVICE_ID=0
@@ -10,7 +12,10 @@ export MIDI_PORT_MATCH='MPK Mini Mk II'
 
 ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/issues/3
 
-cd ~/backlooper_backend
+# Prevent USB audio device from suspending mid-session (causes callback stalls and silent loops).
+echo -1 | tee /sys/module/usbcore/parameters/autosuspend > /dev/null
+
+cd "$REPO_DIR"
 github_reachable=false
 for attempt in {1..3}; do
 	echo "Checking GitHub DNS (attempt $attempt/3)"
@@ -32,6 +37,6 @@ if "$github_reachable"; then
 else
 	echo "GitHub DNS unavailable after 3 attempts; continuing with local version"
 fi
-source .venv/bin/activate
+source "$REPO_DIR/.venv/bin/activate"
 python -m pip install -e .
 python -m backlooper

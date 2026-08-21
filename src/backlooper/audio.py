@@ -75,6 +75,7 @@ class AudioStream:
         self._output_latency_from_device_seconds = None
         self._driver_warning_printed = False
         self._clipping_skip_until = 0.0
+        self._last_callback_wall_time = 0.0  # wall-clock time of the previous callback; 0 = first
         self._active_track_logged: set = set()  # tracks already logged on first playback
         self._audio_process: Optional[Process] = None
 
@@ -100,6 +101,18 @@ class AudioStream:
         """
         if self._samples_origin.value != self._samples_origin.value:
             self._samples_origin.value = time.time()
+
+        now_wall = time.time()
+        if self._last_callback_wall_time > 0:
+            gap = now_wall - self._last_callback_wall_time
+            if gap > self._time_between_blocks * 10:
+                self._logger.warning(
+                    'Callback gap: %.3f s (expected %.3f s) — '
+                    'audio device stalled; ~%d samples unrecorded.',
+                    gap, self._time_between_blocks,
+                    round(gap * self.sample_rate),
+                )
+        self._last_callback_wall_time = now_wall
 
         output_time = callback_time.outputBufferDacTime
         input_time = callback_time.inputBufferAdcTime
@@ -305,11 +318,21 @@ class AudioStream:
         if origin == origin:  # not NaN
             start_idx = round((start_time_value - origin) * self.sample_rate)
             end_idx = round((end_time_value - origin) * self.sample_rate)
+            expected_write_idx = round((time.time() - origin) * self.sample_rate)
             logger.info(
-                'Set loop track %d: start_idx=%d end_idx=%d length=%d offset_samples=%d',
+                'Set loop track %d: start_idx=%d end_idx=%d length=%d offset_samples=%d '
+                '(expected write_idx≈%d)',
                 track_id, start_idx, end_idx, end_idx - start_idx,
-                round(offset * self.sample_rate),
+                round(offset * self.sample_rate), expected_write_idx,
             )
+            if start_idx > expected_write_idx:
+                logger.warning(
+                    'Track %d: loop start (%d) is %.1f s ahead of expected write index (%d) — '
+                    'audio device may have stalled; loop will play silence.',
+                    track_id, start_idx,
+                    (start_idx - expected_write_idx) / self.sample_rate,
+                    expected_write_idx,
+                )
         else:
             logger.info(
                 'Set loop track %d: start=%.3f end=%.3f (audio origin not yet set)',
