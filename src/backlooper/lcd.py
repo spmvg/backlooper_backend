@@ -85,12 +85,13 @@ class LCDScreen:
 
     # --- public API --------------------------------------------------------
 
-    def write_line(self, row: int, text: str) -> None:
+    def write_line(self, row: int, text: str, log=True) -> None:
         """Write *text* to *row* (0 or 1), truncating/padding to 16 characters."""
         if row not in (0, 1):
             raise ValueError('LCD row must be 0 or 1')
         padded = text[:LCD_WIDTH].ljust(LCD_WIDTH)
-        logger.info('LCD row %d: %s', row, padded)
+        if log:
+            logger.info('LCD row %d: %s', row, padded)
         if not self._available:
             return
 

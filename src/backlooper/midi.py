@@ -199,30 +199,26 @@ class MidiController:
             asyncio.run_coroutine_threadsafe(self._toggle_track(track_id), self._loop)
         elif action == ActionType.BARS_TO_RECORD:
             self._bars_to_record = (1, 2, 4, 8)[min(value * 4 // 128, 3)]
-            logger.info('Bars to record set to %d', self._bars_to_record)
-            self._screen.write_line(1, f'Bars: {self._bars_to_record}')
+            self._screen.write_line(1, f'Bars: {self._bars_to_record}', log=False)
         elif action == ActionType.MUTE_CLICK:
             if self._session.audio.clicktrack_volume > 0:
                 self._clicktrack_volume_before_mute = self._session.audio.clicktrack_volume
                 self._session.audio.clicktrack_volume = 0.0
-                self._screen.write_line(1, 'Click: muted')
+                self._screen.write_line(1, 'Click: muted', log=False)
             else:
                 self._session.audio.clicktrack_volume = self._clicktrack_volume_before_mute
                 volume_percent = round(self._clicktrack_volume_before_mute * 100)
-                self._screen.write_line(1, f'Click: {volume_percent}%')
+                self._screen.write_line(1, f'Click: {volume_percent}%', log=False)
         elif action == ActionType.CLICKTRACK_VOLUME:
             self._session.audio.clicktrack_volume = value / 127.0
             volume_percent = round(value / 127.0 * 100)
-            logger.info('Clicktrack volume set to %d%%', volume_percent)
-            self._screen.write_line(1, f'Volume: {volume_percent}%')
+            self._screen.write_line(1, f'Volume: {volume_percent}%', log=False)
         elif action == ActionType.TEMPO:
             if not self._all_tracks_empty():
-                logger.info('Tempo change ignored — tracks not empty')
-                self._screen.write_line(1, 'Clear tracks first')
+                self._screen.write_line(1, 'Clear tracks first', log=False)
                 return
             bpm = round(BPM_MIN + (value / 127.0) * (BPM_MAX - BPM_MIN))
-            logger.info('Tempo set to %d BPM', bpm)
-            self._screen.write_line(1, f'Tempo: {bpm} BPM')
+            self._screen.write_line(1, f'Tempo: {bpm} BPM', log=False)
             asyncio.run_coroutine_threadsafe(self._session.set_bpm(bpm), self._loop)
         elif action == ActionType.RESET:
             asyncio.run_coroutine_threadsafe(self._session.reset(), self._loop)
