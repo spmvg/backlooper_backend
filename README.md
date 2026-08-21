@@ -1,5 +1,18 @@
 # Backlooper
 
+```mermaid
+flowchart LR
+    Guitar --- AmpIN
+
+    subgraph Amp["Amp"]
+        AmpIN["IN"] --- FX_SEND["FX SEND"]
+        FX_RETURN["FX RETURN"]
+    end
+
+    FX_SEND --- BL["Backlooper\n(audio interface: INST · loopback ON)"]
+    BL --- FX_RETURN
+```
+
 Backlooper loops audio without having to trigger beforehand.
 Audio is always being recorded.
 The last few bars will be played back if you select a track at approximately the first beat of the next bar.
