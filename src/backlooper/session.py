@@ -155,7 +155,20 @@ class Session:
             number_of_bars=bars_to_record,
             number_of_bars_offset=number_of_bars_offset,
         )
-        logger.debug('Recording starts at %s and ends at %s', bar_start_time, bar_end_time)
+        audio_origin = self.audio.origin
+        logger.info(
+            'request_recording track=%d bars=%d bar_start=%.3f bar_end=%.3f '
+            'audio_origin=%s session_origin=%.3f',
+            track_id, bars_to_record, bar_start_time, bar_end_time,
+            f'{audio_origin:.3f}' if audio_origin == audio_origin else 'NaN',
+            self.origin,
+        )
+        if audio_origin == audio_origin and bar_start_time < audio_origin:
+            logger.warning(
+                'Track %d: bar_start_time (%.3f) is %.3f s before audio origin (%.3f) — '
+                'those samples were never recorded; expect silence at loop start.',
+                track_id, bar_start_time, audio_origin - bar_start_time, audio_origin,
+            )
 
         track.state = TrackState.TRIGGERED
         track.start_timestamp = bar_start_time

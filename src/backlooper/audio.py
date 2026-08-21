@@ -74,6 +74,7 @@ class AudioStream:
         self._output_latency_from_device_seconds = None
         self._driver_warning_printed = False
         self._clipping_skip_until = 0.0
+        self._active_track_logged: set = set()  # tracks already logged on first playback
 
     def _log_if_clipping_detected(self, samples: np.ndarray):
         """Prints a warning if the audio output reaches or exceeds the normalized amplitude limit."""
@@ -135,6 +136,25 @@ class AudioStream:
             loop_starttime_index = round((loop_starttime - self._samples_origin.value) * self.sample_rate)
             loop_endtime_index = round((loop_endtime - self._samples_origin.value) * self.sample_rate)
             offset_in_samples = round(offset * self.sample_rate)
+
+            if track_id not in self._active_track_logged:
+                self._active_track_logged.add(track_id)
+                self._logger.info(
+                    'Track %d playback started: start_index=%d end_index=%d '
+                    'loop_length=%d current_index=%d samples_origin=%.3f',
+                    track_id, loop_starttime_index, loop_endtime_index,
+                    loop_endtime_index - loop_starttime_index,
+                    self._current_index, self._samples_origin.value,
+                )
+                if loop_starttime_index < 0:
+                    self._logger.warning(
+                        'Track %d: loop_starttime_index=%d is negative — '
+                        'loop start precedes audio origin by %.3f s. '
+                        'First %d samples will be silence.',
+                        track_id, loop_starttime_index,
+                        -loop_starttime_index / self.sample_rate,
+                        -loop_starttime_index,
+                    )
             looped_current_index = (
                 self._current_index - offset_in_samples - loop_starttime_index + self._latency_samples.value
             ) % (
@@ -262,7 +282,21 @@ class AudioStream:
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id] = start_time_value
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+1] = end_time_value
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+2] = offset
-        logger.debug('Set loop start and end for track %s', track_id)
+        origin = self._samples_origin.value
+        if origin == origin:  # not NaN
+            start_idx = round((start_time_value - origin) * self.sample_rate)
+            end_idx = round((end_time_value - origin) * self.sample_rate)
+            logger.info(
+                'Set loop track %d: start_idx=%d end_idx=%d length=%d offset_samples=%d',
+                track_id, start_idx, end_idx, end_idx - start_idx,
+                round(offset * self.sample_rate),
+            )
+        else:
+            logger.info(
+                'Set loop track %d: start=%.3f end=%.3f (audio origin not yet set)',
+                track_id, start_time_value, end_time_value,
+            )
+        self._active_track_logged.discard(track_id)
 
     def reset_loop(
             self,
@@ -272,7 +306,8 @@ class AudioStream:
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id] = _DEFAULT_LOOPER_VALUE
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+1] = _DEFAULT_LOOPER_VALUE
         self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK*track_id+2] = 0
-        logger.debug('Reset loop for track %s', track_id)
+        self._active_track_logged.discard(track_id)
+        logger.info('Reset loop for track %s', track_id)
 
     @property
     def origin(self):

@@ -2,6 +2,7 @@
 This module contains the implementation of storage of audio for recording and playback.
 """
 from dataclasses import dataclass
+import logging
 from math import floor
 from multiprocessing import shared_memory
 from typing import Tuple
@@ -21,6 +22,8 @@ To allow multiple processes to read and write the same storage, ``multiprocessin
 """
 
 _dtype = float
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -89,6 +92,10 @@ class StripedStorage:
             try:
                 memory = self._get_existing_memory(key)
             except FileNotFoundError:
+                logger.warning(
+                    'read: stripe %r not found at index %d (start_index=%d) — returning zeros',
+                    key, start_index + read_data, start_index,
+                )
                 memory = None
 
             storage_array = np.ndarray(
