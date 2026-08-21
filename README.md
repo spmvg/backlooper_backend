@@ -38,6 +38,7 @@ The screen then walks through each slot in order — press the physical button o
 |------|------|--------|
 | Track 1–6 | button | toggle record → play → stop |
 | Reset tracks | button | clear all tracks |
+| Mute click | button | toggle click track |
 | Bars | fader | recording length: 1, 2, 4, or 8 bars |
 | Volume | fader | click-track volume |
 | Tempo | fader | BPM (60–200) |
