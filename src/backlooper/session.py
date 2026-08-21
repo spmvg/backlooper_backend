@@ -71,6 +71,7 @@ class Session:
     def __post_init__(self):
         self.origin: Optional[float] = None
         self.current_bar: Optional[int] = None
+        self._last_desync_counter: int = 0
         self._initialize_tracks()
 
     def _initialize_tracks(self):
@@ -87,11 +88,27 @@ class Session:
         loop = asyncio.get_event_loop()
         loop.create_task(self.click())
         loop.create_task(self.send_tracks_update())
+        loop.create_task(self._watch_desync())
 
         self.audio.clicktrack_bpm = self.bpm
         self.audio.clicktrack_origin = self.origin
         self.audio.play()
         self._send_status(f'Init [{VERSION}]')
+
+    async def _watch_desync(self):
+        """Resets track state whenever the audio process signals a desync."""
+        while True:
+            await asyncio.sleep(0.2)
+            counter = self.audio.desync_counter
+            if counter != self._last_desync_counter:
+                self._last_desync_counter = counter
+                logger.error('ERROR: desync signalled by audio process — resetting all tracks')
+                for track_id in self.tracks.keys():
+                    self.audio.reset_loop(track_id)
+                self._initialize_tracks()
+                self._send_status('ERROR: Desynced')
+                await asyncio.sleep(2)
+                await self.send_tracks_update()
 
     async def click(self):
         """Tracks the current beat and bar internally. Loops indefinitely."""

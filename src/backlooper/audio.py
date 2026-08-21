@@ -30,6 +30,7 @@ _SHARED_FLOAT_TYPE = 'd'
 _SHARED_INT_TYPE = 'i'
 _LOOPER_FIELDS_PER_TRACK = 3
 _IDENTIFIER_LENGTH = 7  # since KeyOffset name can be max. 14 on macOS, use 7 for the identifier
+_DESYNC_GAP_THRESHOLD_SECONDS = 2.0
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class AudioStream:
         self._storage = StripedStorage(identifier=self._storage_identifier)
         self._time_between_blocks = self.block_size / self.sample_rate
         self._current_index = 0  # time when _samples_origin is initialized, has _current_index 0
+        self._write_index = Value('l', 0)  # mirrors _current_index but shared with main process
         self._samples_origin = Value(_SHARED_FLOAT_TYPE, _DEFAULT_ORIGIN_VALUE)
         self._previous_dac_time = None
         self._loop_start_end_times = ShareableList([_DEFAULT_LOOPER_VALUE, _DEFAULT_LOOPER_VALUE, 0] * NUMBER_OF_TRACKS)
@@ -77,6 +79,7 @@ class AudioStream:
         self._clipping_skip_until = 0.0
         self._last_callback_wall_time = 0.0  # wall-clock time of the previous callback; 0 = first
         self._active_track_logged: set = set()  # tracks already logged on first playback
+        self._desync_counter = Value(_SHARED_INT_TYPE, 0)
         self._audio_process: Optional[Process] = None
 
     def _log_if_clipping_detected(self, samples: np.ndarray):
@@ -112,6 +115,21 @@ class AudioStream:
                     gap, self._time_between_blocks,
                     round(gap * self.sample_rate),
                 )
+            if gap >= _DESYNC_GAP_THRESHOLD_SECONDS:
+                self._logger.error(
+                    'ERROR: desync — %.1f s gap; shifting origins and clearing all loops.',
+                    gap,
+                )
+                # Shift both origins forward so _current_index stays consistent with wall time.
+                self._samples_origin.value += gap
+                if self._clicktrack_origin.value == self._clicktrack_origin.value:  # not NaN
+                    self._clicktrack_origin.value += gap
+                for track_id in range(NUMBER_OF_TRACKS):
+                    self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK * track_id] = _DEFAULT_LOOPER_VALUE
+                    self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK * track_id + 1] = _DEFAULT_LOOPER_VALUE
+                    self._loop_start_end_times[_LOOPER_FIELDS_PER_TRACK * track_id + 2] = 0
+                self._active_track_logged.clear()
+                self._desync_counter.value += 1
         self._last_callback_wall_time = now_wall
 
         output_time = callback_time.outputBufferDacTime
@@ -234,6 +252,7 @@ class AudioStream:
         self._log_if_clipping_detected(outdata)
 
         self._current_index += desired_samples
+        self._write_index.value = self._current_index
         self._previous_dac_time = callback_time.outputBufferDacTime
 
         if (time.time() - start_of_callback) / self._time_between_blocks > 0.5:
@@ -353,10 +372,18 @@ class AudioStream:
 
     @property
     def origin(self):
-        """
-        Wrapper around the ``multiprocessing.Value`` object containing the first execution time of the callback
-        function."""
+        """Wall-clock time of the first callback (i.e. index 0 in the storage)."""
         return self._samples_origin.value
+
+    @property
+    def write_index(self) -> int:
+        """Highest sample index written by the audio subprocess; readable from any process."""
+        return self._write_index.value
+
+    @property
+    def desync_counter(self) -> int:
+        """Incremented by the audio subprocess each time a desync is detected and healed."""
+        return self._desync_counter.value
 
     @property
     def clicktrack_origin(self):
