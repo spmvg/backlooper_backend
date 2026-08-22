@@ -1,6 +1,6 @@
 # This script assumes that:
-#   - The location of the repository is `~/backlooper_backend`
-#   - The virtual environment is located at `~/backlooper_backend/.venv`
+#   - The location of the repository is `~/backlooper`
+#   - The virtual environment is located at `~/backlooper/.venv`
 #   - The input and output devices are both at index 0
 #   - I2C is enabled, LCD contrast dialed properly
 
@@ -8,9 +8,9 @@ export INPUT_DEVICE_ID=0
 export OUTPUT_DEVICE_ID=0
 export MIDI_PORT_MATCH='MPK Mini Mk II'
 
-ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper_backend/issues/3
+ulimit -n 1048576  # workaround for https://github.com/spmvg/backlooper/issues/3
 
-cd ~/backlooper_backend
+cd ~/backlooper
 github_reachable=false
 for attempt in {1..3}; do
 	echo "Checking GitHub DNS (attempt $attempt/3)"

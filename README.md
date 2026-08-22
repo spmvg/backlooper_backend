@@ -49,7 +49,7 @@ Enable I2C in `raspi-config` and wire the LCD backpack (SDA/SCL + 5 V + GND).
 Clone the repository, then register and start the systemd service:
 
 ```bash
-bash ~/backlooper_backend/scripts/install-run-on-startup.sh
+bash ~/backlooper/scripts/install-run-on-startup.sh
 ```
 
 The service runs `scripts/dev-setup-run.sh` on every boot: pulls the latest version, installs dependencies, and starts Backlooper. Logs:
