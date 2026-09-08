@@ -23,6 +23,13 @@ LONG_PRESS_SECONDS = 5.0
 MAPPING_TIMEOUT_SECONDS = 5.0
 FIRST_MAPPING_TIMEOUT_SECONDS = MAPPING_TIMEOUT_SECONDS * 2
 FADER_DEBOUNCE_SECONDS = 2.0
+BARS_TO_RECORD_OPTIONS = (1, 2, 4, 8, 12, 16, 24, 32)
+
+
+def _bars_from_fader(value: int) -> int:
+    return BARS_TO_RECORD_OPTIONS[
+        min(value * len(BARS_TO_RECORD_OPTIONS) // 128, len(BARS_TO_RECORD_OPTIONS) - 1)
+    ]
 
 
 class ActionType(str, Enum):
@@ -198,7 +205,7 @@ class MidiController:
             track_id = entry.get('track_id')
             asyncio.run_coroutine_threadsafe(self._toggle_track(track_id), self._loop)
         elif action == ActionType.BARS_TO_RECORD:
-            self._bars_to_record = (1, 2, 4, 8)[min(value * 4 // 128, 3)]
+            self._bars_to_record = _bars_from_fader(value)
             self._screen.write_line(1, f'Bars: {self._bars_to_record}', log=False)
         elif action == ActionType.MUTE_CLICK:
             if self._session.audio.clicktrack_volume > 0:
