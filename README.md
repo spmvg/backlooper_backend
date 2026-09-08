@@ -38,7 +38,7 @@ Hold any MIDI button for **5 seconds** to enter mapping mode. Press the physical
 | Mute click | button | toggle click track on/off |
 | Click volume | fader | click-track volume |
 | Tempo | fader | BPM (60–200), only when all tracks are empty |
-| Bars to record | fader | recording length: 1, 2, 4, or 8 bars |
+| Bars to record | fader | recording length: 1, 2, 4, 8, 12, 16, 24, or 32 bars |
 
 After all slots are assigned, or after 5 s of inactivity, the map is saved and reloaded on the next run.
 
