@@ -16,7 +16,7 @@ flowchart LR
     end
 
     AI --- Pi
-    AI -- "Headphones out" --- Reamp["Reamp Pedal\n(e.g. Radial ReAmp HP)"]
+    AI -- "Headphones OUT" --- Reamp["Reamp Pedal\n(e.g. Radial ReAmp HP)"]
     Reamp --- AmpIN["Amp IN"]
 ```
 
