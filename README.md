@@ -4,12 +4,7 @@ A looper pedal that removes the need to think about when to start recording. Aud
 
 ```mermaid
 flowchart LR
-    Guitar --- AmpIN
-
-    subgraph Amp["Amp"]
-        AmpIN["IN"] --- FX_SEND["FX SEND"]
-        FX_RETURN["FX RETURN"]
-    end
+    Guitar --- AI
 
     subgraph Backlooper["Backlooper"]
         AI["Audio Interface\n(INST · loopback ON)"]
@@ -20,12 +15,14 @@ flowchart LR
         Pi --- MIDI
     end
 
-    FX_SEND --- AI
     AI --- Pi
-    AI --- FX_RETURN
+    AI -- "Headphones OUT" --- Reamp["Reamp Pedal\n(e.g. Radial ReAmp HP)"]
+    Reamp --- AmpIN["Amp IN"]
 ```
 
 The 16×2 LCD (HD44780 + PCF8574 I2C backpack) shows track states and status messages. Any USB MIDI device provides the controls.
+
+No reamp pedal? Feed the interface's headphone out into the amp's FX loop instead: `Guitar → Amp IN → FX SEND → Audio Interface (headphone out → FX RETURN)`.
 
 ## MIDI mapping
 
