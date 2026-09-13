@@ -22,7 +22,7 @@ flowchart LR
 
 The 16×2 LCD (HD44780 + PCF8574 I2C backpack) shows track states and status messages. Any USB MIDI device provides the controls.
 
-No reamp pedal? Feed the interface's headphone out into the amp's FX loop instead: `Guitar → Amp IN → FX SEND → Audio Interface (headphone out → FX RETURN)`.
+No reamp pedal? Feed the interface's headphone out into the amp's FX loop instead: `Guitar → Amp IN → FX SEND → Audio Interface (Headphones OUT → FX RETURN)`.
 
 ## MIDI mapping
 
